@@ -90,6 +90,76 @@ CREATE TABLE IF NOT EXISTS email_sends (
   clicked_at TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+-- ---------- Sales pipeline (prospect businesses found by the weekly lead scan) ----------
+CREATE TABLE IF NOT EXISTS opportunities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_type TEXT NOT NULL DEFAULT 'lead',     -- lead | switch | chain
+  business_key TEXT NOT NULL,                  -- normalized name used for de-duplication
+  priority TEXT DEFAULT 'Warm',                -- Hot | Warm | Watch
+  branch TEXT DEFAULT '',
+  business TEXT NOT NULL,
+  location TEXT DEFAULT '',
+  stage TEXT DEFAULT '',
+  whats_happening TEXT DEFAULT '',
+  deal_size TEXT DEFAULT '',
+  deal_low INTEGER,
+  deal_high INTEGER,
+  decision_timeline TEXT DEFAULT '',
+  deadline TEXT,                               -- optional hard date (bid close, order window) for focus ranking
+  target_list TEXT DEFAULT '',
+  persona TEXT DEFAULT '',
+  objection TEXT DEFAULT '',
+  hooks TEXT DEFAULT '',
+  rebate_flag TEXT DEFAULT '',
+  how_to_reach TEXT DEFAULT '',
+  backup_contacts TEXT DEFAULT '',
+  current_supplier TEXT DEFAULT '',            -- rep-owned ("gold") fields start here
+  mutual_connections TEXT DEFAULT '',
+  curtis_relationship TEXT DEFAULT '',
+  next_step TEXT DEFAULT '',
+  source TEXT DEFAULT '',
+  source_date TEXT DEFAULT '',
+  assigned_rep TEXT DEFAULT '',
+  status TEXT DEFAULT 'New',
+  outreach_to TEXT DEFAULT '',
+  outreach_channel TEXT DEFAULT '',
+  outreach_subject TEXT DEFAULT '',
+  outreach_body TEXT DEFAULT '',
+  first_seen_week TEXT NOT NULL,
+  last_seen_week TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_opp_key ON opportunities(business_key);
+CREATE TABLE IF NOT EXISTS opp_activities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS personas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  titles TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  cares_about TEXT DEFAULT '',
+  objections TEXT DEFAULT '',
+  message TEXT DEFAULT '',
+  channels TEXT DEFAULT '',
+  materials TEXT DEFAULT ''
+);
+-- Hand-written parts of each week's executive summary (numbers are computed live).
+CREATE TABLE IF NOT EXISTS weekly_reports (
+  week_of TEXT PRIMARY KEY,
+  headline TEXT DEFAULT '',
+  focus TEXT DEFAULT '[]',        -- [{action, branch, deadline, deal, why}]
+  plays TEXT DEFAULT '[]',        -- [{title, detail}]
+  risks TEXT DEFAULT '[]',        -- [string]
+  sources TEXT DEFAULT '[]',      -- [{source, reachable, notes}]
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -103,6 +173,8 @@ const DEFAULT_SETTINGS = {
   score_email_open: 2,
   score_email_click: 5,
   mql_threshold: 50, // contacts reaching this score auto-promote to MQL
+  branches: ['Springfield', 'Portland', 'Bend', 'Medford', 'Boise'],
+  reps: [],
 };
 for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
   db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(k, JSON.stringify(v));
@@ -120,7 +192,7 @@ function setSettings(obj) {
 }
 
 // Parse JSON columns on rows coming out of the DB.
-const JSON_COLS = ['tags', 'properties', 'fields', 'settings', 'data', 'meta', 'detail', 'trigger', 'steps', 'log'];
+const JSON_COLS = ['focus', 'plays', 'risks', 'sources', 'tags', 'properties', 'fields', 'settings', 'data', 'meta', 'detail', 'trigger', 'steps', 'log'];
 function parse(row) {
   if (!row) return row;
   const out = { ...row };

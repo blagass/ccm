@@ -567,4 +567,4 @@ async function settingsView() {
   };
 }
 
-boot();
+window.addEventListener('DOMContentLoaded', boot);

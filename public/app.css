@@ -69,3 +69,42 @@ iframe.email{width:100%;height:480px;border:1px solid var(--line);border-radius:
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px}
 .tabs a{padding:8px 14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
 .tabs a.active{color:var(--brand);border-color:var(--brand);font-weight:600}
+
+/* ---------- Sales pipeline ---------- */
+.nav-label{color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:14px 10px 4px}
+.small{font-size:12px}
+h3.band{background:#1f3a5f;color:#fff;font-size:13px;letter-spacing:.04em;text-transform:uppercase;padding:7px 12px;border-radius:6px;margin:20px 0 12px}
+.headline{background:#fdf2f2;border-color:#f8d7da;color:#9b1c1c;font-size:15px}
+.stat{display:block;color:inherit}a.stat:hover{border-color:var(--brand)}
+.stat.hot{background:#fdf2f2;border-color:#f8d7da}.stat.hot .n{color:#9b1c1c}
+.editable{outline:none;border-radius:4px;min-width:40px}
+.editable:hover{background:#f8fafc;box-shadow:0 0 0 1px #e2e8f0}.editable:focus{background:#fff;box-shadow:0 0 0 2px var(--brand)}
+.editable:empty::before{content:attr(data-ph);color:#98a2b3}
+.play{padding:8px 0;border-bottom:1px solid var(--line)}.play div{font-size:13px;color:#344054}
+ul.bullets{margin:0;padding-left:18px}ul.bullets li{margin-bottom:6px}
+th.gold{background:#fdf6e7;color:#8a5a12}
+table.opps td{font-size:13px}
+tr.pri-Hot td{background:#fdf2f2}tr.pri-Warm td{background:#fffbeb}tr.pri-Watch td{background:#f7f7f8}
+tr.click.pri-Hot:hover td{background:#fbe4e6}tr.click.pri-Warm:hover td{background:#fff3cd}
+input.inline,select.inline{padding:4px 6px;font-size:13px;min-width:120px;background:#fffdf7;border-color:#e7c98f}
+.brief h1{margin:0;font-size:24px}.brief-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}
+.quick{justify-content:flex-start;gap:16px;background:#fdf6e7;border:1px solid #f0dcae;border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.quick label{flex:0 0 auto;display:flex;flex-direction:column;font-size:12px;font-weight:600;color:#8a5a12;gap:4px}
+.quick input,.quick select{width:190px}
+.brief-sec{margin-top:16px}.brief-sec h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:#1f3a5f;padding:5px 10px;border-radius:5px;margin:0 0 8px}
+.gold-sec h3{background:#b7791f}.gold-sec textarea{background:#fffdf7;border-color:#e7c98f}
+table.kv th{width:210px;text-transform:none;letter-spacing:0;font-size:13px;color:#475467;background:none}
+table.kv td{font-size:14px}
+.brief p{margin:4px 0;font-size:14px}
+ul.checks{list-style:none;padding:0;margin:0}ul.checks li{padding:4px 0}
+pre.email-body{white-space:pre-wrap;font:14px/1.55 system-ui,sans-serif;background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:14px}
+.persona textarea{font-size:13px}
+@media print{
+  body{background:#fff;font-size:11px}.side,.no-print,.toast{display:none!important}
+  .shell{display:block}main{padding:0;max-width:none}
+  .card{border:1px solid #ddd;padding:10px;break-inside:avoid}
+  .editable:empty{display:none}.grid{gap:8px}h3.band{margin:10px 0 6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  tr.pri-Hot td,.stat.hot,.headline,.brief-sec h3,.quick{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .stat .n{font-size:20px}
+}
+tr.pri-Hot .pill.bad{background:#b42318;color:#fff}tr.pri-Warm .pill.warn{background:#b54708;color:#fff}tr.pri-Watch .pill{background:#667085;color:#fff}

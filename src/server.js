@@ -8,6 +8,8 @@ const forms = require('./forms');
 const mailer = require('./mailer');
 const automation = require('./automation');
 const bus = require('./events');
+const pipeline = require('./pipeline');
+const xlsx = require('./xlsx');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const API_KEY = process.env.API_KEY || '';
@@ -325,6 +327,53 @@ api.put('/workflows/:id', (req, res) => {
   res.json(parse(db.prepare('SELECT * FROM workflows WHERE id = ?').get(req.params.id)));
 });
 api.delete('/workflows/:id', (req, res) => { db.prepare('DELETE FROM workflows WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
+
+// ---------- Sales pipeline (weekly lead scan, switch prospects, chain accounts) ----------
+api.get('/pipeline/meta', (req, res) => res.json({
+  list_types: pipeline.LIST_TYPES, priorities: pipeline.PRIORITIES, statuses: pipeline.STATUSES, columns: pipeline.COLUMNS,
+  branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
+  weeks: pipeline.weeks(), current_week: pipeline.mondayOf(),
+}));
+api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
+api.put('/pipeline/reports/:week', (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
+api.get('/opportunities', (req, res) => res.json(pipeline.list(req.query)));
+api.post('/opportunities', (req, res) => res.status(201).json(pipeline.create(req.body, { week: req.body.week })));
+api.get('/opportunities/:id', (req, res) => {
+  const o = pipeline.get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Not found' });
+  res.json({ ...o, personas: pipeline.personasFor(o.persona), activity: pipeline.activity(o.id) });
+});
+api.patch('/opportunities/:id', (req, res) => {
+  const o = pipeline.update(Number(req.params.id), req.body);
+  o ? res.json(o) : res.status(404).json({ error: 'Not found' });
+});
+api.delete('/opportunities/:id', (req, res) => { db.prepare('DELETE FROM opportunities WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
+api.post('/opportunities/:id/notes', (req, res) => {
+  const t = String(req.body.text || '').trim();
+  if (!t || !pipeline.get(req.params.id)) return res.status(400).json({ error: 'Note text required' });
+  pipeline.log(Number(req.params.id), 'note', t);
+  res.json({ ok: true });
+});
+// Turn a prospect into a marketing contact so workflows/emails can run against them.
+api.post('/opportunities/:id/contact', (req, res) => {
+  const o = pipeline.get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Not found' });
+  const { contact } = contacts.upsert({ ...req.body, company: o.business, properties: { branch: o.branch, opportunity_id: o.id } }, { source: 'pipeline' });
+  contacts.addTag(contact.id, 'pipeline');
+  pipeline.log(o.id, 'contact', `Linked contact ${contact.email}`);
+  res.json(contacts.get(contact.id));
+});
+api.get('/personas', (req, res) => res.json(pipeline.personas()));
+api.post('/personas', (req, res) => res.json(pipeline.upsertPersona(req.body)));
+api.delete('/personas/:id', (req, res) => { db.prepare('DELETE FROM personas WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
+api.post('/pipeline/import', express.raw({ type: () => true, limit: '25mb' }), wrap(async (req, res) => {
+  if (!req.body?.length) return res.status(400).json({ error: 'Upload an .xlsx file' });
+  res.json(await xlsx.importWorkbook(req.body, { week: req.query.week || undefined }));
+}));
+api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
+  const { buffer, filename } = await xlsx.exportWorkbook(req.query.week, { company: getSettings().company_name, scope: req.query.scope });
+  res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${filename}"` }).send(Buffer.from(buffer));
+}));
 
 // Settings
 api.get('/settings', (req, res) => res.json({ ...getSettings(), smtp_configured: !!process.env.SMTP_HOST, base_url: mailer.BASE_URL() }));

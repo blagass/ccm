@@ -1,6 +1,6 @@
 # LeadFlow
 
-A self-hosted alternative to HubSpot for **forms, lead management, and marketing automation**. It's a single Node.js process with an embedded SQLite database. There's no build step, and the only runtime dependencies are `express` and `nodemailer`.
+A self-hosted alternative to HubSpot for **forms, lead management, marketing automation, and a weekly sales pipeline**. It's a single Node.js process with an embedded SQLite database. There's no build step, and the only runtime dependencies are `express` and `nodemailer`.
 
 ## Features
 
@@ -30,6 +30,20 @@ A self-hosted alternative to HubSpot for **forms, lead management, and marketing
 - Unsubscribe link plus a `List-Unsubscribe` header. Unsubscribed contacts are never emailed.
 - Broadcasts send one-off emails to a segment.
 - Outbox shows every rendered email.
+
+**Sales pipeline (weekly lead scan)**
+- Three lists, one row per business: **New leads**, **Switch prospects** (existing operators whose supplier decision is reopening) and **Chain & franchisee accounts**. Each row has all 23 columns from the weekly lead file: priority, branch, stage, what's happening, deal size, decision timeline, persona, likely objection → response, hooks, rebate flag, how to reach, backup contacts, plus the rep-owned ("gold") fields: current supplier, mutual connections, Curtis relationship, assigned rep and status.
+- **Import the weekly `.xlsx`** (the `Curtis_Weekly_Leads_YYYY-MM-DD.xlsx` layout). New businesses are added. Businesses already being tracked get their scan details refreshed, but **reps' updates are kept** (assigned rep, status, relationship intel, notes), so each week's file adds to the history instead of replacing it.
+- A business can only be on one list. If it shows up on two tabs in the same file, it's kept on the first and the duplicate is reported.
+- **Executive Summary** shows live tiles (new / Hot / switch / chain counts, estimated pipeline, Hot leads not yet assigned, leads still at "New"), plus:
+  - the "where to focus this week" list: editable, or suggested automatically by deadline and deal size;
+  - pipeline by branch;
+  - bigger plays, risks and lead sources;
+  - rep workload and a status funnel.
+  It prints on one page.
+- **One-page brief** for every business: snapshot, persona quick read, conversation starters, contacts, relationship intel, next-step checklist, outreach email (copy or open in your mail app), source link, and an activity log for notes and status changes.
+- **Personas** library (message, channels and materials for each buyer type), linked from every brief.
+- **Export to Excel** rebuilds the weekly workbook in the same format: Executive Summary with live formulas, the three list tabs with gold rep columns and a Status dropdown, Personas, Outreach Drafts, a brief tab per Hot lead, and Sources & Gaps.
 
 ## Quick start
 
@@ -81,6 +95,7 @@ All `/api/*` routes, except `/api/public/*`, need the session cookie or `Authori
 - `GET/POST /api/workflows`, `GET/PUT/DELETE /api/workflows/:id`
 - `POST /api/broadcasts/preview`, `POST /api/broadcasts`
 - `GET /api/dashboard`, `GET/PUT /api/settings`
+- Pipeline: `GET/POST /api/opportunities`, `GET/PATCH/DELETE /api/opportunities/:id`, `POST /api/opportunities/:id/notes|contact`, `GET /api/pipeline/summary?week=`, `PUT /api/pipeline/reports/:week`, `POST /api/pipeline/import` (raw .xlsx body), `GET /api/pipeline/export.xlsx?week=`, `GET/POST /api/personas`
 - Public: `GET /api/public/forms/:publicId`, `POST /api/public/forms/:publicId/submit`
 
 ## Project layout
@@ -92,12 +107,16 @@ src/contacts.js    contacts, tags, stages, scoring, timeline
 src/forms.js       form definitions, validation, submission pipeline
 src/mailer.js      template rendering, tracking, SMTP/dev transport
 src/automation.js  workflow engine (triggers, steps, scheduler)
-public/            admin SPA (vanilla JS) + embed.js
-test/e2e.test.js   end-to-end tests (npm test)
+src/pipeline.js    sales pipeline: opportunities, dedupe, week-over-week merge, executive summary math
+src/xlsx.js        weekly lead workbook import/export
+public/            admin SPA (vanilla JS: app.js marketing, pipeline.js sales) + embed.js
+test/              end-to-end tests (npm test)
 ```
 
 ## Known limitations / next steps
 
+- **Don't commit real lead files or the `data/` folder to a public repository.** Import them through the app instead.
+- Branch names default to Springfield, Portland, Bend, Medford and Boise. Change them with `PUT /api/settings` (`branches`).
 - There is one admin user. Multiple users and roles are not built yet.
 - Editing a workflow's steps while contacts are mid-run: those contacts resume at the same step *number*, so reordering steps can shift where they continue.
 - Broadcasts are sent sequentially in-process. For very large lists, add a queue and respect your ESP's rate limits.
