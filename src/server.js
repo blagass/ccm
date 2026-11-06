@@ -384,7 +384,12 @@ api.post('/pipeline/scan', (req, res) => {
       if (r.action === 'created') out.created++; else if (r.action === 'updated') out.updated++; else out.duplicates.push(r.note);
     } catch (e) { out.errors.push({ row: i, business: o?.business, error: e.message }); }
   });
-  if (report && typeof report === 'object') { pipeline.saveReport(week, report); out.report = true; }
+  // Never let automated research overwrite notes a person imported or edited for that week.
+  if (report && typeof report === 'object') {
+    const existing = pipeline.getReport(week);
+    if (existing.source && existing.source !== 'scan') out.report = `kept: this week's notes were ${existing.source === 'import' ? 'imported from a file' : 'edited by hand'}`;
+    else { pipeline.saveReport(week, report, { source: 'scan' }); out.report = true; }
+  }
   res.json(out);
 });
 api.get('/pipeline/export.xlsx', wrap(async (req, res) => {

@@ -166,6 +166,10 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
+// Migrations for databases created by earlier versions.
+// Existing rows get NULL (unknown), which a scan may refresh; new rows always record their source.
+try { db.exec('ALTER TABLE weekly_reports ADD COLUMN source TEXT'); } catch { /* column exists */ }
+
 const DEFAULT_SETTINGS = {
   company_name: 'My Company',
   from_email: process.env.FROM_EMAIL || 'hello@example.com',

@@ -240,3 +240,19 @@ test('API key auth works for automation', async () => {
   assert.equal((await req('GET', '/api/opportunities', null, { authorization: 'Bearer wrong' })).status, 401);
   cookie = saved;
 });
+
+test('automated scans never overwrite imported or hand-edited weekly notes', async () => {
+  // 2026-11-02 notes came from the imported workbook.
+  const r = await req('POST', '/api/pipeline/scan', { week: '2026-11-02', opportunities: [], report: { headline: 'Scan headline', focus: [], plays: [], risks: [], sources: [] } });
+  assert.match(String(r.body.report), /^kept/);
+  assert.equal((await req('GET', '/api/pipeline/summary?week=2026-11-02')).body.report.headline, 'Two bids close soon. Win those first.');
+  // A week the scan wrote itself can be refreshed by the next scan…
+  await req('POST', '/api/pipeline/scan', { week: '2026-11-23', opportunities: [], report: { headline: 'First', focus: [], plays: [], risks: [], sources: [] } });
+  const again = await req('POST', '/api/pipeline/scan', { week: '2026-11-23', opportunities: [], report: { headline: 'Second', focus: [], plays: [], risks: [], sources: [] } });
+  assert.equal(again.body.report, true);
+  // …until someone edits it in the app.
+  await req('PUT', '/api/pipeline/reports/2026-11-23', { headline: 'Edited by the sales manager' });
+  const third = await req('POST', '/api/pipeline/scan', { week: '2026-11-23', opportunities: [], report: { headline: 'Third', focus: [], plays: [], risks: [], sources: [] } });
+  assert.match(String(third.body.report), /edited by hand/);
+  assert.equal((await req('GET', '/api/pipeline/summary?week=2026-11-23')).body.report.headline, 'Edited by the sales manager');
+});

@@ -111,7 +111,7 @@ async function execSummary(q) {
     risks: $$('#risks li').map(li => li.innerText.trim()).filter(Boolean),
   });
   $('#savereport').onclick = async () => { await PUT('/pipeline/reports/' + s.week, readReport()); toast('Saved'); };
-  $('#headline').onblur = () => PUT('/pipeline/reports/' + s.week, { headline: $('#headline').innerText.trim() });
+  $('#headline').onblur = () => { const h = $('#headline').innerText.trim(); if (h !== (rep.headline || '')) PUT('/pipeline/reports/' + s.week, { headline: h }); };
   $('#addplay').onclick = async () => { const r = readReport(); r.plays.push({ title: 'New play', detail: 'Describe it' }); await PUT('/pipeline/reports/' + s.week, r); route(); };
   $('#addrisk').onclick = async () => { const r = readReport(); r.risks.push('New risk or decision'); await PUT('/pipeline/reports/' + s.week, r); route(); };
 }

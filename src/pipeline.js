@@ -159,16 +159,17 @@ function weeks() {
 
 function getReport(week) {
   return parse(db.prepare('SELECT * FROM weekly_reports WHERE week_of = ?').get(week)) ||
-    { week_of: week, headline: '', focus: [], plays: [], risks: [], sources: [] };
+    { week_of: week, headline: '', focus: [], plays: [], risks: [], sources: [], source: null };
 }
-function saveReport(week, input) {
+// source: 'manual' (edited in the app), 'import' (from a weekly .xlsx) or 'scan' (automated research).
+function saveReport(week, input, { source = 'manual' } = {}) {
   const cur = getReport(week);
   const r = { ...cur, ...input };
   for (const k of ['focus', 'plays', 'risks', 'sources']) if (!Array.isArray(r[k])) throw err(`${k} must be a list`);
-  db.prepare(`INSERT INTO weekly_reports (week_of, headline, focus, plays, risks, sources, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+  db.prepare(`INSERT INTO weekly_reports (week_of, headline, focus, plays, risks, sources, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(week_of) DO UPDATE SET headline = excluded.headline, focus = excluded.focus, plays = excluded.plays,
-    risks = excluded.risks, sources = excluded.sources, updated_at = excluded.updated_at`)
-    .run(week, String(r.headline || ''), JSON.stringify(r.focus), JSON.stringify(r.plays), JSON.stringify(r.risks), JSON.stringify(r.sources));
+    risks = excluded.risks, sources = excluded.sources, source = excluded.source, updated_at = excluded.updated_at`)
+    .run(week, String(r.headline || ''), JSON.stringify(r.focus), JSON.stringify(r.plays), JSON.stringify(r.risks), JSON.stringify(r.sources), source);
   return getReport(week);
 }
 

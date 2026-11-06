@@ -151,7 +151,7 @@ async function importWorkbook(buffer, { week } = {}) {
       if (s) rep.sources.push({ source: s, reachable: r, notes: n });
     });
   }
-  if (rep.headline || rep.focus.length || rep.plays.length || rep.risks.length || rep.sources.length) pipeline.saveReport(week, rep);
+  if (rep.headline || rep.focus.length || rep.plays.length || rep.risks.length || rep.sources.length) pipeline.saveReport(week, rep, { source: 'import' });
   return report;
 }
 
