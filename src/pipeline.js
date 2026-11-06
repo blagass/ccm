@@ -64,7 +64,8 @@ function mondayOf(date = new Date()) {
 }
 
 function get(id) { return parse(db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id)); }
-function log(id, type, summary) { db.prepare('INSERT INTO opp_activities (opportunity_id, type, summary) VALUES (?, ?, ?)').run(id, type, summary); }
+try { db.exec('ALTER TABLE opp_activities ADD COLUMN user_name TEXT'); } catch { /* column exists */ }
+function log(id, type, summary, user = null) { db.prepare('INSERT INTO opp_activities (opportunity_id, type, summary, user_name) VALUES (?, ?, ?, ?)').run(id, type, summary, user); }
 
 function clean(input) {
   const out = {};
@@ -88,7 +89,7 @@ function create(input, { week, actor = 'manual' } = {}) {
   const row = { list_type: 'lead', priority: 'Warm', status: 'New', ...data, business_key: key, first_seen_week: week, last_seen_week: week };
   const cols = Object.keys(row);
   const info = db.prepare(`INSERT INTO opportunities (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map(c => row[c] ?? null));
-  log(info.lastInsertRowid, 'created', `Added to ${LIST_TYPES[row.list_type]} (${actor})`);
+  log(info.lastInsertRowid, 'created', `Added to ${LIST_TYPES[row.list_type]}${/^scan |^manual$/.test(actor) ? ` (${actor})` : ''}`, /^scan |^manual$/.test(actor) ? null : actor);
   return get(info.lastInsertRowid);
 }
 
@@ -104,19 +105,20 @@ function update(id, input, { actor = 'rep' } = {}) {
   }
   if (data.deal_size !== undefined && data.deal_low === undefined && data.deal_size !== cur.deal_size) [data.deal_low, data.deal_high] = parseDeal(data.deal_size);
   const changed = Object.keys(data).filter(k => (data[k] ?? '') !== (cur[k] ?? ''));
+  const who = /^scan /.test(actor) ? null : actor;
   if (!changed.length) return cur;
   db.prepare(`UPDATE opportunities SET ${changed.map(k => `${k} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`)
     .run(...changed.map(k => data[k] ?? null), id);
   for (const k of changed) {
-    if (k === 'status') log(id, 'status', `Status: ${cur.status} → ${data.status}`);
-    else if (k === 'assigned_rep') log(id, 'assign', data.assigned_rep ? `Assigned to ${data.assigned_rep}` : 'Unassigned');
-    else if (k === 'priority') log(id, 'priority', `Priority: ${cur.priority} → ${data.priority}`);
-    else if (k === 'list_type') log(id, 'move', `Moved to ${LIST_TYPES[data.list_type]}`);
+    if (k === 'status') log(id, 'status', `Status: ${cur.status} → ${data.status}`, who);
+    else if (k === 'assigned_rep') log(id, 'assign', data.assigned_rep ? `Assigned to ${data.assigned_rep}` : 'Unassigned', who);
+    else if (k === 'priority') log(id, 'priority', `Priority: ${cur.priority} → ${data.priority}`, who);
+    else if (k === 'list_type') log(id, 'move', `Moved to ${LIST_TYPES[data.list_type]}`, who);
   }
   const other = changed.filter(k => !['status', 'assigned_rep', 'priority', 'list_type', 'business_key'].includes(k));
   const NICE = { outreach_to: 'email recipient', outreach_channel: 'email channel', outreach_subject: 'email subject', outreach_body: 'email draft', deal_low: 'est. low $', deal_high: 'est. high $', deadline: 'deadline' };
   const names = [...new Set(other.map(k => NICE[k] || COLUMNS.find(c => c.key === k)?.label || k))];
-  if (other.length) log(id, 'edit', `Updated ${names.join(', ')} (${actor})`);
+  if (other.length) log(id, 'edit', `Updated ${names.join(', ')}${who ? '' : ` (${actor})`}`, who);
   return get(id);
 }
 

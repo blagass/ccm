@@ -108,3 +108,5 @@ pre.email-body{white-space:pre-wrap;font:14px/1.55 system-ui,sans-serif;backgrou
   .stat .n{font-size:20px}
 }
 tr.pri-Hot .pill.bad{background:#b42318;color:#fff}tr.pri-Warm .pill.warn{background:#b54708;color:#fff}tr.pri-Watch .pill{background:#667085;color:#fff}
+.whoami{color:#e2e8f0;font-size:13px;padding:8px 10px;margin-top:auto;border-top:1px solid #1f2937}.whoami div{color:#94a3b8;font-size:11px}
+.side .whoami+.logout{margin-top:0}

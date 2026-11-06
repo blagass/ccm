@@ -43,18 +43,25 @@ function bind(root, state, onChange) {
 }
 
 // ---------- Auth ----------
-function showLogin() { $('#shell').classList.add('hidden'); $('#login').classList.remove('hidden'); }
+let ME = null;
+function showLogin() { $('#shell').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#login').classList.remove('hidden'); }
 $('#login-form').addEventListener('submit', async e => {
   e.preventDefault();
-  try { await POST('/login', { password: e.target.password.value }); boot(); }
+  try { await POST('/login', { email: e.target.email.value, password: e.target.password.value }); boot(); }
   catch (err) { $('#login-err').textContent = err.message; }
 });
 $('#logout').addEventListener('click', async e => { e.preventDefault(); await POST('/logout'); showLogin(); });
 
 async function boot() {
+  const acceptMatch = location.hash.match(/^#\/accept\/([\w-]+)/);
+  if (acceptMatch) return acceptInvite(acceptMatch[1]);
   const me = await GET('/me');
   if (!me.authenticated) return showLogin();
-  $('#login').classList.add('hidden'); $('#shell').classList.remove('hidden');
+  ME = me.user;
+  $('#login').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#shell').classList.remove('hidden');
+  $$('.admin-only').forEach(el => el.classList.toggle('hidden', ME.role !== 'admin'));
+  $('#whoami').innerHTML = `${esc(ME.name)}<div>${ME.role === 'admin' ? 'Admin' : 'Rep'}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
+  if (me.default_password && !sessionStorage.lfWarned) { sessionStorage.lfWarned = 1; setTimeout(() => toast('Security: the owner password is still "admin". Set ADMIN_PASSWORD in Railway.', true), 800); }
   META = await GET('/meta');
   route();
 }
@@ -73,6 +80,8 @@ const routes = [
   [/^\/outbox\/(\d+)$/, outboxView, 'emails'],
   [/^\/broadcasts$/, broadcasts, 'broadcasts'],
   [/^\/settings$/, settingsView, 'settings'],
+  [/^\/users$/, usersView, 'users'],
+  [/^\/accept\/([\w-]+)$/, acceptInvite, ''],
 ];
 async function route() {
   const [path, query] = (location.hash.slice(1) || '/').split('?');
@@ -565,6 +574,75 @@ async function settingsView() {
     const body = {}; $$('[data-s]').forEach(i => body[i.dataset.s] = i.type === 'number' ? Number(i.value) : i.value);
     await PUT('/settings', body); toast('Settings saved');
   };
+}
+
+// ---------- Accept invite / reset password ----------
+async function acceptInvite(token) {
+  $('#login').classList.add('hidden'); $('#shell').classList.add('hidden');
+  const box = $('#accept'); box.classList.remove('hidden');
+  const r = await fetch('/api/invites/' + encodeURIComponent(token)); const inv = await r.json();
+  if (!r.ok) { box.innerHTML = `<div class="card" style="width:380px"><h1>LeadFlow</h1><p class="err">${esc(inv.error)}</p><a href="/">Go to sign in</a></div>`; return; }
+  const reset = inv.kind === 'reset';
+  box.innerHTML = `<form class="card" id="accept-form" style="width:380px;display:grid;gap:12px">
+    <h1 style="margin:0">${reset ? 'Choose a new password' : `Join ${esc(inv.company)}`}</h1>
+    <p class="muted" style="margin:0">${reset ? 'For' : 'You were invited as'} <b>${esc(inv.email)}</b>${reset ? '' : ` (${inv.role === 'admin' ? 'Admin' : 'Rep'})`}.</p>
+    ${reset ? '' : '<input name="name" placeholder="Your name (shown on leads you work)" required autofocus>'}
+    <input type="password" name="password" placeholder="Password (10+ characters)" minlength="10" required autocomplete="new-password">
+    <input type="password" name="confirm" placeholder="Repeat password" required autocomplete="new-password">
+    <button class="btn primary">${reset ? 'Save password' : 'Create my account'}</button><div class="err" id="accept-err"></div></form>`;
+  $('#accept-form').onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target;
+    if (f.password.value !== f.confirm.value) return $('#accept-err').textContent = "Passwords don't match";
+    const res = await fetch(`/api/invites/${encodeURIComponent(token)}/accept`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: f.name?.value, password: f.password.value }) });
+    const j = await res.json();
+    if (!res.ok) return $('#accept-err').textContent = j.error;
+    history.replaceState(null, '', '/#/'); boot();
+  };
+}
+
+// ---------- Users (admins) ----------
+async function usersView() {
+  const d = await GET('/users');
+  const roleSel = (id, role) => `<select data-role="${id}" style="width:auto">${opts(['rep', 'admin'], role, { rep: 'Rep', admin: 'Admin' })}</select>`;
+  view.innerHTML = `<div class="head"><div><h1>Users</h1><div class="muted">Admins manage users and settings. Reps can do everything else.</div></div></div>
+  <div class="grid g-side">
+    <div class="card" style="align-self:start"><h2>Invite someone</h2>
+      <form id="inv" style="display:grid;gap:10px">
+        <input name="email" type="email" placeholder="name@curtisresteq.com" required>
+        <select name="role">${opts(['rep', 'admin'], 'rep', { rep: 'Rep', admin: 'Admin' })}</select>
+        <button class="btn primary">Create invite link</button>
+      </form>
+      <div id="inv-result"></div>
+      <p class="muted small">Links work once and expire after ${d.invite_days} days. ${'If email is set up, the invite is also emailed.'}</p>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><h2>Team</h2>${d.users.length ? `<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr>
+        ${d.users.map(u => `<tr${u.disabled ? ' style="opacity:.5"' : ''}><td><b>${esc(u.name)}</b>${u.disabled ? ' <span class="pill bad">disabled</span>' : ''}${u.id === ME.id ? ' <span class="pill">you</span>' : ''}</td><td>${esc(u.email)}</td>
+          <td>${roleSel(u.id, u.role)}</td><td class="muted small">${u.last_login_at ? fmt(u.last_login_at) : 'never'}</td>
+          <td style="white-space:nowrap"><button class="btn sm" data-reset="${u.id}">Reset password</button> <button class="btn sm" data-toggle="${u.id}" data-disabled="${u.disabled}">${u.disabled ? 'Enable' : 'Disable'}</button> <button class="btn sm danger" data-del="${u.id}" data-name="${esc(u.name)}">Remove</button></td></tr>`).join('')}</table>`
+        : '<div class="empty">No team members yet. Invite your reps on the left.</div>'}</div>
+      <div class="card"><h2>Pending invites</h2>${d.invites.length ? `<table><tr><th>Email</th><th>Type</th><th>Role</th><th>Invited by</th><th>Expires</th><th></th></tr>
+        ${d.invites.map(i => `<tr><td>${esc(i.email)}</td><td>${i.kind === 'reset' ? 'Password reset' : 'Invite'}</td><td>${esc(i.role)}</td><td>${esc(i.invited_by)}</td><td class="muted small">${fmt(i.expires_at)}</td><td><button class="btn sm danger" data-revoke="${i.id}">Revoke</button></td></tr>`).join('')}</table>`
+        : '<div class="muted">None.</div>'}</div>
+    </div>
+  </div>`;
+  const showLink = (r, label) => {
+    $('#inv-result').innerHTML = `<div class="card" style="margin-top:12px;background:#f0fdf4;border-color:#bbf7d0">
+      <b>${label} for ${esc(r.email)}</b>${r.emailed ? ' — emailed to them.' : r.email_error ? ` — <span class="err">email failed: ${esc(r.email_error)}</span>` : ' — send them this link:'}
+      <input id="inv-link" readonly value="${esc(r.link)}" style="margin-top:8px"><button class="btn sm" id="copy-link" style="margin-top:6px">Copy link</button></div>`;
+    $('#copy-link').onclick = () => navigator.clipboard.writeText(r.link).then(() => toast('Link copied'), () => { $('#inv-link').select(); toast('Press Ctrl/Cmd+C to copy'); });
+  };
+  $('#inv').onsubmit = async e => {
+    e.preventDefault();
+    try { const r = await POST('/users/invite', { email: e.target.email.value, role: e.target.role.value }); await usersView(); showLink(r, 'Invite created'); }
+    catch (err) { toast(err.message, true); }
+  };
+  $$('[data-reset]').forEach(b => b.onclick = async () => { try { const r = await POST(`/users/${b.dataset.reset}/reset`); await usersView(); showLink(r, 'Password reset link'); } catch (err) { toast(err.message, true); } });
+  $$('[data-toggle]').forEach(b => b.onclick = async () => { try { await PATCH('/users/' + b.dataset.toggle, { disabled: b.dataset.disabled !== '1' }); usersView(); } catch (err) { toast(err.message, true); } });
+  $$('[data-role]').forEach(sel => sel.onchange = async () => { try { await PATCH('/users/' + sel.dataset.role, { role: sel.value }); toast('Role updated'); } catch (err) { toast(err.message, true); usersView(); } });
+  $$('[data-del]').forEach(b => b.onclick = async () => { if (confirm(`Remove ${b.dataset.name}? Their name stays on past activity.`)) { try { await DEL('/users/' + b.dataset.del); usersView(); } catch (err) { toast(err.message, true); } } });
+  $$('[data-revoke]').forEach(b => b.onclick = async () => { await DEL('/users/invites/' + b.dataset.revoke); usersView(); });
 }
 
 window.addEventListener('DOMContentLoaded', boot);

@@ -11,11 +11,14 @@
     <form id="login-form" class="card">
       <h1>LeadFlow</h1>
       <p class="muted">Forms, leads &amp; marketing automation</p>
-      <input type="password" name="password" placeholder="Admin password" autofocus required>
+      <input type="email" name="email" placeholder="Email" autocomplete="username" autofocus>
+      <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
+      <div class="muted small">Owner login: leave email blank and use the admin password.</div>
       <button class="btn primary">Sign in</button>
       <div class="err" id="login-err"></div>
     </form>
   </div>
+  <div id="accept" class="login hidden"></div>
   <div id="shell" class="shell hidden">
     <nav class="side">
       <div class="brand">LeadFlow</div>
@@ -30,7 +33,10 @@
       <a href="#/workflows" data-nav="workflows">Workflows</a>
       <a href="#/emails" data-nav="emails">Emails</a>
       <a href="#/broadcasts" data-nav="broadcasts">Broadcasts</a>
-      <a href="#/settings" data-nav="settings">Settings</a>
+      <div class="nav-label admin-only">Admin</div>
+      <a href="#/users" data-nav="users" class="admin-only">Users</a>
+      <a href="#/settings" data-nav="settings" class="admin-only">Settings</a>
+      <div id="whoami" class="whoami"></div>
       <a href="#" id="logout" class="logout">Sign out</a>
     </nav>
     <main id="view"></main>

@@ -45,6 +45,13 @@ A self-hosted alternative to HubSpot for **forms, lead management, marketing aut
 - **Personas** library (message, channels and materials for each buyer type), linked from every brief.
 - **Export to Excel** rebuilds the weekly workbook in the same format: Executive Summary with live formulas, the three list tabs with gold rep columns and a Status dropdown, Personas, Outreach Drafts, a brief tab per Hot lead, and Sources & Gaps.
 
+**Team accounts**
+- Admins invite people from **Users**. Each invite is a single-use link that expires after 7 days; it's also emailed when SMTP is configured. The invited person picks their own name and password.
+- Roles: **Admin** (manages users and settings, imports weekly files) and **Rep** (everything else).
+- Admins can reset passwords (by sending a new link), change roles, and disable or remove users. Disabling someone signs them out immediately.
+- Pipeline status changes, assignments and notes record who made them, and every user appears in the "Assigned rep" list.
+- The owner login (leave email blank, use `ADMIN_PASSWORD`) always works, so you can't get locked out.
+
 ## Quick start
 
 ```bash
@@ -69,7 +76,7 @@ Without `SMTP_HOST`, emails are rendered and saved to the **Outbox** but not del
 |---|---|
 | `PORT` | HTTP port (default 3000) |
 | `BASE_URL` | Public URL, used in tracking/unsubscribe links and embed code. **Set this in production.** |
-| `ADMIN_PASSWORD` | Admin login (default `admin`) |
+| `ADMIN_PASSWORD` | Owner login: leave email blank on the sign-in page (default `admin`, so change it) |
 | `SESSION_SECRET` | Cookie signing secret (derived from the password if unset) |
 | `API_KEY` | Enables `Authorization: Bearer <key>` access to the admin API |
 | `DB_PATH` | SQLite file (default `data/leadflow.db`) |
@@ -95,6 +102,7 @@ All `/api/*` routes, except `/api/public/*`, need the session cookie or `Authori
 - `GET/POST /api/workflows`, `GET/PUT/DELETE /api/workflows/:id`
 - `POST /api/broadcasts/preview`, `POST /api/broadcasts`
 - `GET /api/dashboard`, `GET/PUT /api/settings`
+- Team (admins): `GET /api/users`, `POST /api/users/invite`, `POST /api/users/:id/reset`, `PATCH/DELETE /api/users/:id`, `DELETE /api/users/invites/:id`; public `GET /api/invites/:token`, `POST /api/invites/:token/accept`
 - Pipeline: `GET/POST /api/opportunities`, `GET/PATCH/DELETE /api/opportunities/:id`, `POST /api/opportunities/:id/notes|contact`, `GET /api/pipeline/summary?week=`, `PUT /api/pipeline/reports/:week`, `POST /api/pipeline/import` (raw .xlsx body), `GET /api/pipeline/export.xlsx?week=`, `GET/POST /api/personas`
 - Public: `GET /api/public/forms/:publicId`, `POST /api/public/forms/:publicId/submit`
 

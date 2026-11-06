@@ -10,6 +10,7 @@ const automation = require('./automation');
 const bus = require('./events');
 const pipeline = require('./pipeline');
 const xlsx = require('./xlsx');
+const users = require('./users');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const API_KEY = process.env.API_KEY || '';
@@ -24,39 +25,83 @@ app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---------- Auth ----------
+// Sessions are "<userId>.<expiry>.<hmac>". userId 0 is the built-in owner login (ADMIN_PASSWORD),
+// which always works so the account can't be locked out. Disabled users lose access immediately.
+const OWNER = { id: 0, name: 'Owner', email: '', role: 'admin' };
 function sign(v) { return crypto.createHmac('sha256', SECRET).update(v).digest('hex'); }
-function makeSession() { const exp = String(Date.now() + 7 * 86400e3); return `${exp}.${sign(exp)}`; }
-function validSession(tok) {
-  if (!tok) return false;
-  const [exp, sig] = tok.split('.');
-  if (!exp || !sig || Number(exp) < Date.now()) return false;
-  const expected = sign(exp);
-  return sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+function makeSession(uid) { const v = `${uid}.${Date.now() + 7 * 86400e3}`; return `${v}.${sign(v)}`; }
+function sessionUser(tok) {
+  const parts = String(tok || '').split('.');
+  if (parts.length !== 3) return null;
+  const [uid, exp, sig] = parts;
+  const expected = sign(`${uid}.${exp}`);
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) || Number(exp) < Date.now()) return null;
+  if (uid === '0') return OWNER;
+  const u = users.get(Number(uid));
+  return u && !u.disabled ? u : null;
 }
 function cookie(req, name) {
   const m = (req.headers.cookie || '').match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
   return m ? decodeURIComponent(m[1]) : null;
 }
+function setSession(req, res, uid) {
+  const secure = req.secure ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `lf_session=${makeSession(uid)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800${secure}`);
+}
 function requireAuth(req, res, next) {
   const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (API_KEY && bearer && bearer.length === API_KEY.length && crypto.timingSafeEqual(Buffer.from(bearer), Buffer.from(API_KEY))) return next();
-  if (validSession(cookie(req, 'lf_session'))) return next();
+  if (API_KEY && bearer && bearer.length === API_KEY.length && crypto.timingSafeEqual(Buffer.from(bearer), Buffer.from(API_KEY))) {
+    req.user = { id: 0, name: 'Automated scan', email: '', role: 'admin' };
+    return next();
+  }
+  const u = sessionUser(cookie(req, 'lf_session'));
+  if (u) { req.user = u; return next(); }
   res.status(401).json({ error: 'Unauthorized' });
 }
+function requireAdmin(req, res, next) {
+  if (req.user?.role === 'admin') return next();
+  res.status(403).json({ error: 'Only admins can do that' });
+}
+
+// Brute-force protection: 10 failed logins per IP per 15 minutes.
+const failures = new Map();
+function tooManyFailures(ip) { const now = Date.now(); const a = (failures.get(ip) || []).filter(t => now - t < 900e3); failures.set(ip, a); return a.length >= 10; }
+function recordFailure(ip) { failures.get(ip)?.push(Date.now()) ?? failures.set(ip, [Date.now()]); if (failures.size > 10000) failures.clear(); }
 
 app.post('/api/login', (req, res) => {
+  if (tooManyFailures(req.ip)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+  const email = String(req.body.email || '').trim();
   const pw = String(req.body.password || '');
-  const ok = pw.length === ADMIN_PASSWORD.length && crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(ADMIN_PASSWORD));
-  if (!ok) return res.status(401).json({ error: 'Wrong password' });
-  const secure = req.secure ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `lf_session=${makeSession()}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800${secure}`);
-  res.json({ ok: true });
+  let user = null;
+  if (email) user = users.authenticate(email, pw);
+  else if (pw.length === ADMIN_PASSWORD.length && crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(ADMIN_PASSWORD))) user = OWNER;
+  if (!user) { recordFailure(req.ip); return res.status(401).json({ error: email ? 'Wrong email or password' : 'Wrong password' }); }
+  setSession(req, res, user.id);
+  res.json({ ok: true, user });
 });
 app.post('/api/logout', (req, res) => {
   res.setHeader('Set-Cookie', 'lf_session=; HttpOnly; Path=/; Max-Age=0');
   res.json({ ok: true });
 });
-app.get('/api/me', (req, res) => res.json({ authenticated: validSession(cookie(req, 'lf_session')), default_password: ADMIN_PASSWORD === 'admin' }));
+app.get('/api/me', (req, res) => {
+  const user = sessionUser(cookie(req, 'lf_session'));
+  res.json({ authenticated: !!user, user, ...(user?.role === 'admin' ? { default_password: ADMIN_PASSWORD === 'admin' } : {}) });
+});
+
+// Invite / password-reset links (public: the token is the credential).
+app.get('/api/invites/:token', (req, res) => {
+  const { invite, error } = users.findInvite(req.params.token);
+  if (error) return res.status(410).json({ error });
+  res.json({ email: invite.email, role: invite.role, kind: invite.kind, company: getSettings().company_name });
+});
+app.post('/api/invites/:token/accept', (req, res) => {
+  if (tooManyFailures(req.ip)) return res.status(429).json({ error: 'Too many attempts. Try again later.' });
+  try {
+    const user = users.acceptInvite(req.params.token, req.body || {});
+    setSession(req, res, user.id);
+    res.json({ ok: true, user });
+  } catch (e) { if (e.status === 410) recordFailure(req.ip); throw e; }
+});
 
 // ---------- Public endpoints (no auth, CORS open so forms work on any site) ----------
 const pub = express.Router();
@@ -331,27 +376,27 @@ api.delete('/workflows/:id', (req, res) => { db.prepare('DELETE FROM workflows W
 // ---------- Sales pipeline (weekly lead scan, switch prospects, chain accounts) ----------
 api.get('/pipeline/meta', (req, res) => res.json({
   list_types: pipeline.LIST_TYPES, priorities: pipeline.PRIORITIES, statuses: pipeline.STATUSES, columns: pipeline.COLUMNS,
-  branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
+  branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...users.names(), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
   weeks: pipeline.weeks(), current_week: pipeline.mondayOf(),
 }));
 api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
 api.put('/pipeline/reports/:week', (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
 api.get('/opportunities', (req, res) => res.json(pipeline.list(req.query)));
-api.post('/opportunities', (req, res) => res.status(201).json(pipeline.create(req.body, { week: req.body.week })));
+api.post('/opportunities', (req, res) => res.status(201).json(pipeline.create(req.body, { week: req.body.week, actor: req.user.name })));
 api.get('/opportunities/:id', (req, res) => {
   const o = pipeline.get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Not found' });
   res.json({ ...o, personas: pipeline.personasFor(o.persona), activity: pipeline.activity(o.id) });
 });
 api.patch('/opportunities/:id', (req, res) => {
-  const o = pipeline.update(Number(req.params.id), req.body);
+  const o = pipeline.update(Number(req.params.id), req.body, { actor: req.user.name });
   o ? res.json(o) : res.status(404).json({ error: 'Not found' });
 });
 api.delete('/opportunities/:id', (req, res) => { db.prepare('DELETE FROM opportunities WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
 api.post('/opportunities/:id/notes', (req, res) => {
   const t = String(req.body.text || '').trim();
   if (!t || !pipeline.get(req.params.id)) return res.status(400).json({ error: 'Note text required' });
-  pipeline.log(Number(req.params.id), 'note', t);
+  pipeline.log(Number(req.params.id), 'note', t, req.user.name);
   res.json({ ok: true });
 });
 // Turn a prospect into a marketing contact so workflows/emails can run against them.
@@ -366,7 +411,7 @@ api.post('/opportunities/:id/contact', (req, res) => {
 api.get('/personas', (req, res) => res.json(pipeline.personas()));
 api.post('/personas', (req, res) => res.json(pipeline.upsertPersona(req.body)));
 api.delete('/personas/:id', (req, res) => { db.prepare('DELETE FROM personas WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
-api.post('/pipeline/import', express.raw({ type: () => true, limit: '25mb' }), wrap(async (req, res) => {
+api.post('/pipeline/import', requireAdmin, express.raw({ type: () => true, limit: '25mb' }), wrap(async (req, res) => {
   if (!req.body?.length) return res.status(400).json({ error: 'Upload an .xlsx file' });
   res.json(await xlsx.importWorkbook(req.body, { week: req.query.week || undefined }));
 }));
@@ -399,7 +444,44 @@ api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
 
 // Settings
 api.get('/settings', (req, res) => res.json({ ...getSettings(), smtp_configured: !!process.env.SMTP_HOST, base_url: mailer.BASE_URL() }));
-api.put('/settings', (req, res) => res.json(setSettings(req.body)));
+api.put('/settings', requireAdmin, (req, res) => res.json(setSettings(req.body)));
+
+// ---------- Team (admins only) ----------
+api.get('/users', requireAdmin, (req, res) => res.json({ users: users.list(), invites: users.pendingInvites(), invite_days: users.INVITE_DAYS }));
+function inviteLink(token) { return `${mailer.BASE_URL()}/#/accept/${token}`; }
+async function emailLink(inv, link, byName) {
+  if (!process.env.SMTP_HOST) return false;
+  const company = mailer.escapeHtml(getSettings().company_name);
+  const what = inv.kind === 'reset' ? 'reset your LeadFlow password' : `join ${company} on LeadFlow`;
+  await mailer.sendInternal(inv.email, inv.kind === 'reset' ? 'Reset your LeadFlow password' : `${byName} invited you to LeadFlow`,
+    `<p>Hi,</p><p>${mailer.escapeHtml(byName)} has invited you to ${what}.</p><p><a href="${link}">${inv.kind === 'reset' ? 'Choose a new password' : 'Accept the invite'}</a></p><p style="color:#888;font-size:12px">This link expires in ${users.INVITE_DAYS} days and can be used once.</p>`);
+  return true;
+}
+api.post('/users/invite', requireAdmin, wrap(async (req, res) => {
+  const inv = users.createInvite(req.body || {}, req.user.name);
+  const link = inviteLink(inv.token);
+  let emailed = false, email_error = null;
+  try { emailed = await emailLink(inv, link, req.user.name); } catch (e) { email_error = e.message; }
+  res.status(201).json({ link, email: inv.email, role: inv.role, expires_at: inv.expires_at, emailed, email_error });
+}));
+api.post('/users/:id/reset', requireAdmin, wrap(async (req, res) => {
+  const inv = users.createReset(Number(req.params.id), req.user.name);
+  const link = inviteLink(inv.token);
+  let emailed = false, email_error = null;
+  try { emailed = await emailLink(inv, link, req.user.name); } catch (e) { email_error = e.message; }
+  res.json({ link, email: inv.email, expires_at: inv.expires_at, emailed, email_error });
+}));
+api.delete('/users/invites/:id', requireAdmin, (req, res) => { users.revokeInvite(Number(req.params.id)); res.json({ ok: true }); });
+api.patch('/users/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (id === req.user.id && (req.body.role === 'rep' || req.body.disabled)) return res.status(400).json({ error: "You can't demote or disable your own account" });
+  const u = users.update(id, req.body || {});
+  u ? res.json(u) : res.status(404).json({ error: 'Not found' });
+});
+api.delete('/users/:id', requireAdmin, (req, res) => {
+  if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: "You can't delete your own account" });
+  users.remove(Number(req.params.id)); res.json({ ok: true });
+});
 
 app.use('/api', api);
 
