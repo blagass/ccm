@@ -211,3 +211,32 @@ test('prospect can be linked to a marketing contact', async () => {
   assert.equal(c.body.company, 'Bistro One (new location)');
   assert.ok(c.body.tags.includes('pipeline'));
 });
+
+test('JSON scan endpoint (used by the scheduled weekly research) merges like the Excel import', async () => {
+  const bistro = (await req('GET', '/api/opportunities?q=Bistro')).body[0];
+  assert.equal((await req('POST', '/api/pipeline/scan', { week: 'nope', opportunities: [] })).status, 400);
+  const r = await req('POST', '/api/pipeline/scan', {
+    week: '2026-11-16',
+    opportunities: [
+      { list_type: 'lead', priority: 'Hot', branch: 'Medford', business: 'Fresh Diner', stage: 'Open bid – closes Dec 1, 2026', deal_size: '$30K–$90K', deadline: '2026-12-01' },
+      { list_type: 'lead', priority: 'Warm', business: 'Bistro One (new location)', stage: 'Opening soon', assigned_rep: '', status: 'New' },
+      { list_type: 'switch', priority: 'Warm', business: 'Fresh Diner (ownership change)' },
+      { list_type: 'lead', priority: 'Scorching', business: 'Bad Row' },
+    ],
+    personas: [{ name: 'Facilities Manager', message: 'Uptime' }],
+    report: { headline: 'Scan headline', focus: [{ action: 'Call Fresh Diner' }], plays: [], risks: [], sources: [] },
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.created, r.body.updated, r.body.duplicates.length, r.body.errors.length, r.body.personas, r.body.report], [1, 1, 1, 1, 1, true]);
+  const o = (await req('GET', `/api/opportunities/${bistro.id}`)).body;
+  assert.equal(o.assigned_rep, 'Dana', 'rep assignment survives the automated scan');
+  assert.equal(o.status, 'Meeting set');
+  assert.equal(o.last_seen_week, '2026-11-16');
+  assert.equal((await req('GET', '/api/pipeline/summary?week=2026-11-16')).body.report.headline, 'Scan headline');
+});
+
+test('API key auth works for automation', async () => {
+  const saved = cookie; cookie = null;
+  assert.equal((await req('GET', '/api/opportunities', null, { authorization: 'Bearer wrong' })).status, 401);
+  cookie = saved;
+});

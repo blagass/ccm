@@ -370,6 +370,23 @@ api.post('/pipeline/import', express.raw({ type: () => true, limit: '25mb' }), w
   if (!req.body?.length) return res.status(400).json({ error: 'Upload an .xlsx file' });
   res.json(await xlsx.importWorkbook(req.body, { week: req.query.week || undefined }));
 }));
+// Automated weekly scan: same merge rules as the Excel import, but JSON in.
+// Body: { week, opportunities: [...], personas?: [...], report?: {headline, focus, plays, risks, sources} }
+api.post('/pipeline/scan', (req, res) => {
+  const { week, opportunities = [], personas = [], report } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(week || ''))) return res.status(400).json({ error: 'week must be YYYY-MM-DD (the Monday of the scan week)' });
+  if (!Array.isArray(opportunities)) return res.status(400).json({ error: 'opportunities must be a list' });
+  const out = { week, created: 0, updated: 0, duplicates: [], errors: [], personas: 0, report: false };
+  for (const p of personas) { try { pipeline.upsertPersona(p); out.personas++; } catch (e) { out.errors.push({ persona: p?.name, error: e.message }); } }
+  opportunities.forEach((o, i) => {
+    try {
+      const r = pipeline.upsertFromScan(o, week);
+      if (r.action === 'created') out.created++; else if (r.action === 'updated') out.updated++; else out.duplicates.push(r.note);
+    } catch (e) { out.errors.push({ row: i, business: o?.business, error: e.message }); }
+  });
+  if (report && typeof report === 'object') { pipeline.saveReport(week, report); out.report = true; }
+  res.json(out);
+});
 api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
   const { buffer, filename } = await xlsx.exportWorkbook(req.query.week, { company: getSettings().company_name, scope: req.query.scope });
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${filename}"` }).send(Buffer.from(buffer));
