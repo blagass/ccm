@@ -1,0 +1,21 @@
+{
+  "name": "leadflow",
+  "version": "1.0.0",
+  "description": "Self-hosted forms, lead management and marketing automation (HubSpot alternative)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --no-warnings src/server.js",
+    "dev": "node --no-warnings --watch src/server.js",
+    "test": "node --no-warnings --test test/*.test.js",
+    "seed": "node --no-warnings scripts/seed.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.3.0",
+    "nodemailer": "^10.3.1"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "private": true
+}

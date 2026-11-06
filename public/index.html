@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LeadFlow</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div id="login" class="login hidden">
+    <form id="login-form" class="card">
+      <h1>LeadFlow</h1>
+      <p class="muted">Forms, leads &amp; marketing automation</p>
+      <input type="password" name="password" placeholder="Admin password" autofocus required>
+      <button class="btn primary">Sign in</button>
+      <div class="err" id="login-err"></div>
+    </form>
+  </div>
+  <div id="shell" class="shell hidden">
+    <nav class="side">
+      <div class="brand">LeadFlow</div>
+      <a href="#/" data-nav="dashboard">Dashboard</a>
+      <a href="#/contacts" data-nav="contacts">Contacts</a>
+      <a href="#/forms" data-nav="forms">Forms</a>
+      <a href="#/workflows" data-nav="workflows">Workflows</a>
+      <a href="#/emails" data-nav="emails">Emails</a>
+      <a href="#/broadcasts" data-nav="broadcasts">Broadcasts</a>
+      <a href="#/settings" data-nav="settings">Settings</a>
+      <a href="#" id="logout" class="logout">Sign out</a>
+    </nav>
+    <main id="view"></main>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
