@@ -184,3 +184,27 @@ table.focus .btn.sm{padding:3px 7px}table.focus .btn[disabled]{opacity:.3;cursor
 .focus-add{margin-top:12px;justify-content:flex-start}
 .focus-add #focus-pick{max-width:460px}
 @media print{table.focus [contenteditable]:empty{display:none}}
+
+/* ---------- Welcome popup ---------- */
+.whoami{cursor:pointer;border-radius:8px}.whoami:hover{background:rgba(255,255,255,.06)}
+.welcome-backdrop{position:fixed;inset:0;background:rgba(0,30,66,.45);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:50;padding:20px;animation:wfade .25s ease}
+.welcome-card{position:relative;width:min(560px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:24px;padding:30px 30px 24px;box-shadow:0 30px 80px rgba(0,25,60,.35);animation:wpop .3s cubic-bezier(.2,.9,.3,1.2);border-top:6px solid var(--teal)}
+.welcome-x{position:absolute;top:14px;right:16px;border:0;background:#f1f4f8;color:var(--navy);width:32px;height:32px;border-radius:50%;font-size:20px;line-height:1;cursor:pointer}
+.welcome-x:hover{background:#e3e9f1}
+.welcome-top{display:flex;gap:16px;align-items:flex-start;margin-bottom:18px}
+.welcome-mark{width:52px;height:52px;flex:0 0 auto;background:var(--brand-soft);border-radius:16px;padding:9px}
+.welcome-top h2{font-family:var(--head);font-weight:400;color:var(--navy);font-size:28px;margin:0 0 4px;letter-spacing:.02em}
+.welcome-top p{margin:0;font-size:15px;color:#3d4a5c;line-height:1.55}
+.welcome-label{font-family:var(--head);color:var(--teal);letter-spacing:.1em;text-transform:uppercase;font-size:13px;margin-bottom:8px}
+.welcome-wins{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:8px}
+.welcome-wins a{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:#f6f9fc;border:1px solid #e6edf5;color:var(--navy);font-size:14px;line-height:1.45;transition:transform .15s,background .15s}
+.welcome-wins a:hover{background:var(--brand-soft);transform:translateX(3px)}
+.welcome-wins .wi{flex:0 0 32px;height:32px;border-radius:10px;background:#fff;display:grid;place-items:center;font-size:16px;box-shadow:0 1px 3px rgba(0,45,97,.12)}
+.welcome-wins .go{margin-left:auto;color:var(--brand);font-size:20px}
+.welcome-tip{background:#e9f8f9;color:#00606a;border-radius:14px;padding:11px 14px;font-size:13px;line-height:1.5}
+.welcome-closing{margin:14px 0 18px;color:var(--navy);font-weight:700}
+.welcome-actions{display:flex;gap:10px;justify-content:flex-end}
+.welcome-actions .btn{border-radius:999px;padding:10px 20px}
+@keyframes wfade{from{opacity:0}to{opacity:1}}
+@keyframes wpop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+@media print{.welcome-backdrop{display:none!important}}

@@ -45,6 +45,9 @@ A self-hosted alternative to HubSpot for **forms, lead management, marketing aut
 - **Personas** library (message, channels and materials for each buyer type), linked from every brief.
 - **Export to Excel** rebuilds the weekly workbook in the same format: Executive Summary with live formulas, the three list tabs with gold rep columns and a Status dropdown, Personas, Outreach Drafts, a brief tab per Hot lead, and Sources & Gaps.
 
+**Daily welcome**
+- Once a day, after signing in, a friendly popup greets each person by name and suggests up to three quick wins from their own work: carried-over tasks, deadlines in the next week, Hot leads still at "New", and (for admins) Hot leads nobody has picked up. Busy weeks are framed calmly. Click your name in the sidebar to see it again.
+
 **Team accounts**
 - Admins invite people from **Users**. Each invite is a single-use link that expires after 7 days; it's also emailed when SMTP is configured. The invited person picks their own name and password.
 - Roles: **Admin** (manages users and settings, imports weekly files) and **Rep** (everything else).

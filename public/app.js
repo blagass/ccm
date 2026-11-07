@@ -61,6 +61,9 @@ async function boot() {
   $('#login').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#shell').classList.remove('hidden');
   $$('.admin-only').forEach(el => el.classList.toggle('hidden', ME.role !== 'admin'));
   $('#whoami').innerHTML = `${esc(ME.name)}<div>${ME.role === 'admin' ? 'Admin' : 'Rep'}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
+  $('#whoami').title = "Show today's welcome";
+  $('#whoami').onclick = () => showWelcome(true);
+  showWelcome(false);
   if (me.default_password && !sessionStorage.lfWarned) { sessionStorage.lfWarned = 1; setTimeout(() => toast('Security: the owner password is still "admin". Set ADMIN_PASSWORD in Railway.', true), 800); }
   META = await GET('/meta');
   route();
@@ -643,6 +646,32 @@ async function usersView() {
   $$('[data-role]').forEach(sel => sel.onchange = async () => { try { await PATCH('/users/' + sel.dataset.role, { role: sel.value }); toast('Role updated'); } catch (err) { toast(err.message, true); usersView(); } });
   $$('[data-del]').forEach(b => b.onclick = async () => { if (confirm(`Remove ${b.dataset.name}? Their name stays on past activity.`)) { try { await DEL('/users/' + b.dataset.del); usersView(); } catch (err) { toast(err.message, true); } } });
   $$('[data-revoke]').forEach(b => b.onclick = async () => { await DEL('/users/invites/' + b.dataset.revoke); usersView(); });
+}
+
+// ---------- Welcome popup (once a day per person; click your name in the sidebar to reopen) ----------
+async function showWelcome(force) {
+  const d = new Date(), today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const key = `mc-welcome:${ME.id}:${ME.name}:${today}`;
+  if (!force && localStorage.getItem(key)) return;
+  let w;
+  try { w = await GET(`/welcome?today=${today}&hour=${d.getHours()}`); } catch { return; }
+  localStorage.setItem(key, '1');
+  const box = $('#welcome');
+  box.innerHTML = `<div class="welcome-card">
+    <button class="welcome-x" aria-label="Close">×</button>
+    <div class="welcome-top"><img src="/img/mark.svg" alt="" class="welcome-mark"><div><h2 id="welcome-title">${esc(w.greeting)}</h2><p>${esc(w.intro)}</p></div></div>
+    <div class="welcome-label">Quick wins for today</div>
+    <ol class="welcome-wins">${w.wins.map(x => `<li><a href="${esc(x.href)}" data-close><span class="wi">${esc(x.icon)}</span><span>${esc(x.text)}</span><span class="go">›</span></a></li>`).join('')}</ol>
+    <div class="welcome-tip">${esc(w.tip)}</div>
+    <p class="welcome-closing">${esc(w.closing)}</p>
+    <div class="welcome-actions"><a class="btn" href="#/calendar?d=${today}" data-close>Show me my day</a><button class="btn cta" data-close>Let's go</button></div>
+  </div>`;
+  const close = () => { box.classList.add('hidden'); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  box.onclick = e => { if (e.target === box || e.target.closest('[data-close]') || e.target.closest('.welcome-x')) close(); };
+  document.addEventListener('keydown', onKey);
+  box.classList.remove('hidden');
+  setTimeout(() => $('.welcome-card .cta', box)?.focus(), 50);
 }
 
 window.addEventListener('DOMContentLoaded', boot);

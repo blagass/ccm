@@ -12,6 +12,7 @@ const pipeline = require('./pipeline');
 const xlsx = require('./xlsx');
 const users = require('./users');
 const tasks = require('./tasks');
+const welcome = require('./welcome');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const API_KEY = process.env.API_KEY || '';
@@ -455,6 +456,13 @@ api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
 // Settings
 api.get('/settings', (req, res) => res.json({ ...getSettings(), smtp_configured: !!process.env.SMTP_HOST, base_url: mailer.BASE_URL() }));
 api.put('/settings', requireAdmin, (req, res) => res.json(setSettings(req.body)));
+
+// Daily welcome popup
+api.get('/welcome', (req, res) => {
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(req.query.today || '') ? req.query.today : new Date().toISOString().slice(0, 10);
+  const hour = Math.min(23, Math.max(0, Number(req.query.hour) || 9));
+  res.json(welcome.briefing(req.user, { today, hour }));
+});
 
 // ---------- Calendar & tasks ----------
 api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null })));
