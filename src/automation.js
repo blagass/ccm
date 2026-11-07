@@ -97,7 +97,7 @@ async function runStep(step, contact, wf) {
       const rows = Object.entries({ email: c.email, name: `${c.first_name} ${c.last_name}`.trim(), company: c.company, phone: c.phone, stage: c.stage, score: c.score, ...c.properties })
         .map(([k, v]) => `<tr><td><b>${mailer.escapeHtml(k)}</b></td><td>${mailer.escapeHtml(v)}</td></tr>`).join('');
       await mailer.sendInternal(step.email, mailer.merge(step.subject || 'Lead alert: {{email}}', c),
-        `<p>Workflow "${mailer.escapeHtml(wf.name)}" flagged this contact.</p><table>${rows}</table><p><a href="${mailer.BASE_URL()}/#/contacts/${c.id}">Open in LeadFlow</a></p>`);
+        `<p>Workflow "${mailer.escapeHtml(wf.name)}" flagged this contact.</p><table>${rows}</table><p><a href="${mailer.BASE_URL()}/#/contacts/${c.id}">Open in My Curtis</a></p>`);
       return `notify ${step.email}`;
     }
     case 'webhook': {

@@ -11,6 +11,7 @@ const bus = require('./events');
 const pipeline = require('./pipeline');
 const xlsx = require('./xlsx');
 const users = require('./users');
+const tasks = require('./tasks');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const API_KEY = process.env.API_KEY || '';
@@ -446,14 +447,21 @@ api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
 api.get('/settings', (req, res) => res.json({ ...getSettings(), smtp_configured: !!process.env.SMTP_HOST, base_url: mailer.BASE_URL() }));
 api.put('/settings', requireAdmin, (req, res) => res.json(setSettings(req.body)));
 
+// ---------- Calendar & tasks ----------
+api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null })));
+api.post('/tasks', (req, res) => res.status(201).json(tasks.create(req.body || {}, req.user.name)));
+api.patch('/tasks/:id', (req, res) => { const t = tasks.update(Number(req.params.id), req.body || {}, req.user.name); t ? res.json(t) : res.status(404).json({ error: 'Not found' }); });
+api.delete('/tasks/:id', (req, res) => { tasks.remove(Number(req.params.id)); res.json({ ok: true }); });
+api.get('/opportunities/:id/tasks', (req, res) => res.json(tasks.forLead(Number(req.params.id))));
+
 // ---------- Team (admins only) ----------
 api.get('/users', requireAdmin, (req, res) => res.json({ users: users.list(), invites: users.pendingInvites(), invite_days: users.INVITE_DAYS }));
 function inviteLink(token) { return `${mailer.BASE_URL()}/#/accept/${token}`; }
 async function emailLink(inv, link, byName) {
   if (!process.env.SMTP_HOST) return false;
   const company = mailer.escapeHtml(getSettings().company_name);
-  const what = inv.kind === 'reset' ? 'reset your LeadFlow password' : `join ${company} on LeadFlow`;
-  await mailer.sendInternal(inv.email, inv.kind === 'reset' ? 'Reset your LeadFlow password' : `${byName} invited you to LeadFlow`,
+  const what = inv.kind === 'reset' ? 'reset your My Curtis password' : `join ${company} on My Curtis`;
+  await mailer.sendInternal(inv.email, inv.kind === 'reset' ? 'Reset your My Curtis password' : `${byName} invited you to My Curtis`,
     `<p>Hi,</p><p>${mailer.escapeHtml(byName)} has invited you to ${what}.</p><p><a href="${link}">${inv.kind === 'reset' ? 'Choose a new password' : 'Accept the invite'}</a></p><p style="color:#888;font-size:12px">This link expires in ${users.INVITE_DAYS} days and can be used once.</p>`);
   return true;
 }
@@ -500,7 +508,7 @@ if (require.main === module) {
   const port = Number(process.env.PORT || 3000);
   automation.start();
   app.listen(port, () => {
-    console.log(`LeadFlow running at ${mailer.BASE_URL()}`);
+    console.log(`My Curtis running at ${mailer.BASE_URL()}`);
     if (ADMIN_PASSWORD === 'admin') console.warn('⚠  Using default password "admin" — set ADMIN_PASSWORD before deploying.');
     if (!process.env.SMTP_HOST) console.warn('ℹ  SMTP_HOST not set — emails are recorded in the Outbox but not delivered.');
   });

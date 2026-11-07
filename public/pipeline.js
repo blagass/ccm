@@ -229,6 +229,7 @@ async function opportunityBrief(id) {
     ${sec('Source', o.source ? `<p class="small">${/^https?:\/\//.test(o.source) ? `<a href="${esc(o.source)}" target="_blank" rel="noopener">${esc(o.source)}</a>` : esc(o.source)}${o.source_date ? ` (published ${esc(o.source_date)})` : ''}</p>` : '')}
   </div>
   <div class="card no-print hidden" id="editor" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Edit all fields</h2><button class="btn primary auto" id="save">Save changes</button></div>${editor}</div>
+  <div class="card no-print" id="lead-tasks" style="margin-top:16px"></div>
   <div class="card no-print" style="margin-top:16px"><h2>Activity & notes</h2>
     <div class="row" style="margin-bottom:10px"><textarea id="note" placeholder="Log a call, visit or email…" style="min-height:56px"></textarea><button class="btn auto" id="addnote">Add note</button></div>
     <ul class="timeline">${o.activity.map(a => `<li><span class="t">${fmt(a.created_at)}</span><span class="${a.type === 'note' ? 'note' : ''}">${a.user_name ? `<b>${esc(a.user_name)}:</b> ` : ''}${esc(a.summary)}</span></li>`).join('')}</ul></div>`;
@@ -237,6 +238,7 @@ async function opportunityBrief(id) {
     try { await PATCH('/opportunities/' + id, { [el.dataset.q]: el.value }); toast('Saved'); if (['priority', 'status'].includes(el.dataset.q)) route(); }
     catch (err) { toast(err.message, true); }
   });
+  if (typeof renderLeadTasks === 'function') renderLeadTasks($('#lead-tasks'), o);
   $('#toggle-edit').onclick = () => { $('#editor').classList.toggle('hidden'); $('#editor').scrollIntoView({ behavior: 'smooth' }); };
   $('#save').onclick = async () => { try { await PATCH('/opportunities/' + id, collect()); toast('Saved'); route(); } catch (err) { toast(err.message, true); } };
   $('#del').onclick = async () => { if (confirm(`Delete ${o.business}?`)) { await DEL('/opportunities/' + id); location.hash = '#/pipeline'; } };

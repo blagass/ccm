@@ -186,7 +186,7 @@ async function exportWorkbook(week, { company = 'Curtis Restaurant Equipment', s
   week = sum.week;
   const rows = scope === 'open' ? pipeline.list({ open: true }) : pipeline.list({ week });
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'LeadFlow';
+  wb.creator = 'My Curtis';
   const exec = wb.addWorksheet('Executive Summary', { properties: { tabColor: { argb: NAVY } }, pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1, paperSize: 1 } });
   const listSheets = {};
   for (const [name, type] of Object.entries(SHEETS)) {
@@ -364,7 +364,7 @@ async function exportWorkbook(week, { company = 'Curtis Restaurant Equipment', s
     head('CONTACTS'); line('First try', o.how_to_reach); line('Backups (in order)', o.backup_contacts);
     head('RELATIONSHIP INTEL (REP TO CONFIRM)'); line('Who they buy from now', o.current_supplier); line('Mutual connections', o.mutual_connections); line('Existing relationship with Curtis', o.curtis_relationship);
     head('NEXT STEPS');
-    for (const s of [o.next_step, 'Check NetSuite/AutoQuotes for an existing account', 'Send the outreach email below, personalized', 'Log the contact and update Status in LeadFlow'].filter(Boolean)) line('☐', s);
+    for (const s of [o.next_step, 'Check NetSuite/AutoQuotes for an existing account', 'Send the outreach email below, personalized', 'Log the contact and update Status in My Curtis'].filter(Boolean)) line('☐', s);
     if (o.outreach_body) { head('OUTREACH EMAIL'); line('To', o.outreach_to); line('Subject', o.outreach_subject); line('', o.outreach_body); }
     head('SOURCE'); line('', `${o.source}${o.source_date ? `  (published ${o.source_date})` : ''}`);
   }

@@ -3,27 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>LeadFlow</title>
+  <title>My Curtis</title>
+  <link rel="icon" href="/img/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
   <div id="login" class="login hidden">
     <form id="login-form" class="card">
-      <h1>LeadFlow</h1>
-      <p class="muted">Forms, leads &amp; marketing automation</p>
+      <img src="/img/logo.svg" alt="Curtis Restaurant Equipment" class="logo">
+      <h1>My Curtis</h1>
+      <p class="muted" style="margin:0">Sales pipeline, leads &amp; marketing</p>
       <input type="email" name="email" placeholder="Email" autocomplete="username" autofocus>
       <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
       <div class="muted small">Owner login: leave email blank and use the admin password.</div>
-      <button class="btn primary">Sign in</button>
+      <button class="btn cta">Sign in</button>
       <div class="err" id="login-err"></div>
     </form>
   </div>
   <div id="accept" class="login hidden"></div>
   <div id="shell" class="shell hidden">
     <nav class="side">
-      <div class="brand">LeadFlow</div>
+      <div class="brand"><img src="/img/logo-white.svg" alt="Curtis"><span>My Curtis</span></div>
       <div class="nav-label">Sales</div>
       <a href="#/" data-nav="exec">Executive Summary</a>
+      <a href="#/calendar" data-nav="calendar">Calendar</a>
       <a href="#/pipeline" data-nav="pipeline">Pipeline</a>
       <a href="#/personas" data-nav="personas">Personas</a>
       <div class="nav-label">Marketing</div>
@@ -44,5 +47,6 @@
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
   <script src="/pipeline.js"></script>
+  <script src="/calendar.js"></script>
 </body>
 </html>

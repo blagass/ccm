@@ -581,15 +581,15 @@ async function acceptInvite(token) {
   $('#login').classList.add('hidden'); $('#shell').classList.add('hidden');
   const box = $('#accept'); box.classList.remove('hidden');
   const r = await fetch('/api/invites/' + encodeURIComponent(token)); const inv = await r.json();
-  if (!r.ok) { box.innerHTML = `<div class="card" style="width:380px"><h1>LeadFlow</h1><p class="err">${esc(inv.error)}</p><a href="/">Go to sign in</a></div>`; return; }
+  if (!r.ok) { box.innerHTML = `<div class="card" style="width:380px"><img src="/img/logo.svg" alt="Curtis" class="logo"><h1>My Curtis</h1><p class="err">${esc(inv.error)}</p><a href="/">Go to sign in</a></div>`; return; }
   const reset = inv.kind === 'reset';
   box.innerHTML = `<form class="card" id="accept-form" style="width:380px;display:grid;gap:12px">
-    <h1 style="margin:0">${reset ? 'Choose a new password' : `Join ${esc(inv.company)}`}</h1>
+    <img src="/img/logo.svg" alt="Curtis" class="logo"><h1 style="margin:0;font-size:24px">${reset ? 'Choose a new password' : `Join ${esc(inv.company)}`}</h1>
     <p class="muted" style="margin:0">${reset ? 'For' : 'You were invited as'} <b>${esc(inv.email)}</b>${reset ? '' : ` (${inv.role === 'admin' ? 'Admin' : 'Rep'})`}.</p>
     ${reset ? '' : '<input name="name" placeholder="Your name (shown on leads you work)" required autofocus>'}
     <input type="password" name="password" placeholder="Password (10+ characters)" minlength="10" required autocomplete="new-password">
     <input type="password" name="confirm" placeholder="Repeat password" required autocomplete="new-password">
-    <button class="btn primary">${reset ? 'Save password' : 'Create my account'}</button><div class="err" id="accept-err"></div></form>`;
+    <button class="btn cta">${reset ? 'Save password' : 'Create my account'}</button><div class="err" id="accept-err"></div></form>`;
   $('#accept-form').onsubmit = async e => {
     e.preventDefault();
     const f = e.target;
