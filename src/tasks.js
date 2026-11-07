@@ -109,10 +109,11 @@ function calendar({ from, to, mine, today }) {
     events.push({ date: o.deadline, kind: 'deadline', title: `${o.business}: ${o.stage || 'deadline'}`, priority: o.priority, opportunity_id: o.id, assigned_rep: o.assigned_rep, branch: o.branch });
   }
   // Dated actions from each week's executive focus list.
+  const pipeline = require('./pipeline');
   for (const r of db.prepare('SELECT week_of, focus FROM weekly_reports').all().map(parse)) {
-    for (const f of r.focus || []) {
-      const d = looseDate(f.deadline, r.week_of);
-      if (d && d >= from && d <= to) events.push({ date: d, kind: 'focus', title: f.action, branch: f.branch, detail: f.deadline, week_of: r.week_of });
+    for (const f of pipeline.enrichFocus(r.focus)) {
+      const d = looseDate(f.deadline, r.week_of) || (f.opp && f.opp.deadline) || null;
+      if (d && d >= from && d <= to) events.push({ date: d, kind: 'focus', title: f.label || f.action, branch: f.branch, detail: f.deadline, week_of: r.week_of, opportunity_id: f.opportunity_id });
     }
   }
   for (const m of mondaysBetween(from, to)) events.push({ date: m, kind: 'scan', title: 'Weekly lead scan arrives (5:39am)', week_of: m });

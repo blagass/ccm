@@ -163,11 +163,66 @@ function getReport(week) {
   return parse(db.prepare('SELECT * FROM weekly_reports WHERE week_of = ?').get(week)) ||
     { week_of: week, headline: '', focus: [], plays: [], risks: [], sources: [], source: null };
 }
+// ---------- Focus list: each item points at a prospect when it's about one ----------
+// Stored item: { opportunity_id?, action, why, deadline } — linked items take branch/deal/priority/rep/status
+// live from the prospect; general items (no prospect) keep their own branch and deal text.
+function resolveFocus(items) {
+  return items.map(f => {
+    f = f || {};
+    let id = f.opportunity_id ? Number(f.opportunity_id) : null;
+    if (!id && f.business) id = db.prepare('SELECT id FROM opportunities WHERE business_key = ?').get(businessKey(f.business))?.id || null;
+    if (id && !db.prepare('SELECT 1 FROM opportunities WHERE id = ?').get(id)) id = null;
+    const out = { action: String(f.action || '').trim(), why: String(f.why || '').trim(), deadline: String(f.deadline || '').trim() };
+    if (id) out.opportunity_id = id;
+    else { out.branch = String(f.branch || '').trim(); out.deal = String(f.deal || '').trim(); }
+    return out;
+  }).filter(f => f.action || f.opportunity_id);
+}
+
+// Older focus items (imported from a spreadsheet) are plain text. Link them when the text names exactly
+// one tracked business: its full name, or a distinctive first word ("Corbett SD …" → Corbett School District).
+function autoLink(text, opps) {
+  const t = ' ' + businessKey(String(text || '').split(':')[0]) + ' ';
+  if (t.trim().length < 3) return null;
+  let hits = opps.filter(o => o.business_key && t.includes(' ' + o.business_key + ' '));
+  if (!hits.length) {
+    hits = opps.filter(o => { const w = o.business_key.split(' ')[0]; return w.length >= 5 && t.includes(' ' + w + ' '); });
+    // the first word must also be unique among tracked businesses
+    hits = hits.filter(o => opps.filter(x => x.business_key.split(' ')[0] === o.business_key.split(' ')[0]).length === 1);
+  }
+  return hits.length === 1 ? hits[0].id : null;
+}
+
+function shortDeadline(o) {
+  if (o.deadline) return new Date(o.deadline + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return o.decision_timeline || '';
+}
+
+function enrichFocus(items) {
+  const opps = db.prepare('SELECT * FROM opportunities').all();
+  const byId = Object.fromEntries(opps.map(o => [o.id, o]));
+  return (items || []).map(f => {
+    const id = f.opportunity_id && byId[f.opportunity_id] ? f.opportunity_id : autoLink(f.action, opps);
+    const o = id ? byId[id] : null;
+    if (!o) return { ...f, note: f.deadline || '', opportunity_id: null, opp: null, label: f.action };
+    const action = f.action || o.next_step || 'Make first contact';
+    // Spreadsheet text often starts with the business name; don't repeat it next to the prospect link.
+    const stripped = action.includes(':') && autoLink(action.split(':')[0], [o]) === o.id ? action.slice(action.indexOf(':') + 1).trim() : action;
+    return {
+      ...f, note: f.deadline || '', opportunity_id: o.id, action: stripped,
+      label: `${o.business.split(/\s[–(]/)[0]}: ${stripped}`,
+      branch: o.branch, deal: (o.deal_size || '').split(' (')[0], deadline: f.deadline || shortDeadline(o),
+      opp: { id: o.id, business: o.business, priority: o.priority, status: o.status, assigned_rep: o.assigned_rep, list_type: o.list_type, branch: o.branch, deal_size: o.deal_size, deadline: o.deadline, decision_timeline: o.decision_timeline },
+    };
+  });
+}
+
 // source: 'manual' (edited in the app), 'import' (from a weekly .xlsx) or 'scan' (automated research).
 function saveReport(week, input, { source = 'manual' } = {}) {
   const cur = getReport(week);
   const r = { ...cur, ...input };
   for (const k of ['focus', 'plays', 'risks', 'sources']) if (!Array.isArray(r[k])) throw err(`${k} must be a list`);
+  if (input.focus) r.focus = resolveFocus(input.focus);
   db.prepare(`INSERT INTO weekly_reports (week_of, headline, focus, plays, risks, sources, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(week_of) DO UPDATE SET headline = excluded.headline, focus = excluded.focus, plays = excluded.plays,
     risks = excluded.risks, sources = excluded.sources, source = excluded.source, updated_at = excluded.updated_at`)
@@ -194,7 +249,7 @@ function summary(week) {
   // Suggested focus when nobody has written one: Hot, still-open items, nearest hard deadline first, then biggest deal.
   const suggested = rows.filter(r => r.priority === 'Hot' && !CLOSED.includes(r.status) && r.list_type !== 'chain')
     .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999') || (b.deal_high || 0) - (a.deal_high || 0)).slice(0, 6)
-    .map(r => ({ id: r.id, action: `${r.business}: ${r.next_step || 'make first contact'}`, branch: r.branch, deadline: r.deadline || r.decision_timeline, deal: r.deal_size?.split(' (')[0] || '', why: r.stage }));
+    .map(r => ({ opportunity_id: r.id, action: r.next_step || 'Make first contact', why: r.stage }));
   const all = db.prepare('SELECT status, list_type, deal_low, deal_high, assigned_rep, priority FROM opportunities').all();
   const openAll = all.filter(r => !CLOSED.includes(r.status));
   const reps = {};
@@ -213,8 +268,8 @@ function summary(week) {
     reps: Object.values(reps).sort((a, b) => b.hot - a.hot || b.open - a.open),
     totals: { open: openAll.length, won: all.filter(r => r.status === 'Won').length, open_low: sum(openAll.filter(r => r.list_type !== 'chain'), 'deal_low'), open_high: sum(openAll.filter(r => r.list_type !== 'chain'), 'deal_high') },
     hot: rows.filter(r => r.priority === 'Hot').map(r => ({ id: r.id, business: r.business, list_type: r.list_type, branch: r.branch, assigned_rep: r.assigned_rep, status: r.status, deal_size: r.deal_size, deadline: r.deadline })),
-    suggested_focus: suggested,
-    report: getReport(week),
+    suggested_focus: enrichFocus(suggested),
+    report: (r => ({ ...r, focus: enrichFocus(r.focus) }))(getReport(week)),
   };
 }
 
@@ -239,5 +294,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 
 module.exports = {
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, personas, upsertPersona, personasFor, activity, log,
 };

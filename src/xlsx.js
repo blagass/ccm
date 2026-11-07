@@ -277,7 +277,7 @@ async function exportWorkbook(week, { company = 'Curtis Restaurant Equipment', s
   r++;
   focus.forEach((f, i) => {
     exec.mergeCells(`C${r}:E${r}`); exec.mergeCells(`G${r}:H${r}`);
-    put(`B${r}`, i + 1, { bold: true }); put(`C${r}`, f.action, { size: 9 }); put(`F${r}`, f.branch, { size: 9 }); put(`G${r}`, f.deadline, { size: 9 });
+    put(`B${r}`, i + 1, { bold: true }); put(`C${r}`, f.label || f.action, { size: 9 }); put(`F${r}`, f.branch, { size: 9 }); put(`G${r}`, f.deadline, { size: 9 });
     put(`I${r}`, f.deal, { size: 9 }); put(`J${r}`, f.why, { size: 9 });
     exec.getRow(r).height = 36; r++;
   });

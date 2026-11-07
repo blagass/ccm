@@ -163,7 +163,7 @@ test("reps' updates carry over when next week's file is imported", async () => {
   assert.deepEqual(s.weeks, ['2026-11-09', '2026-11-02']);
   assert.equal(s.report.focus[0].action, 'Bid A: price to GCs', 'written focus list imported for the new week');
   // Suggestions rank open Hot items: hard deadline first, then biggest deal.
-  assert.equal(s.suggested_focus[0].action.split(':')[0], 'Bistro One (new location)');
+  assert.equal(s.suggested_focus[0].opp.business, 'Bistro One (new location)');
 });
 
 test('manual add, duplicate guard, validation, weekly report edits', async () => {
@@ -255,4 +255,43 @@ test('automated scans never overwrite imported or hand-edited weekly notes', asy
   const third = await req('POST', '/api/pipeline/scan', { week: '2026-11-23', opportunities: [], report: { headline: 'Third', focus: [], plays: [], risks: [], sources: [] } });
   assert.match(String(third.body.report), /edited by hand/);
   assert.equal((await req('GET', '/api/pipeline/summary?week=2026-11-23')).body.report.headline, 'Edited by the sales manager');
+});
+
+test('focus list items link to prospects', async () => {
+  const bid = (await req('GET', '/api/opportunities?q=City Kitchen')).body[0];
+  const bistro = (await req('GET', '/api/opportunities?q=Bistro')).body[0];
+  // Plain-text items from a spreadsheet are matched to the business they name.
+  await req('PUT', '/api/pipeline/reports/2026-11-30', { focus: [
+    { action: 'City Kitchen Bid: price to every GC', branch: 'x', deal: 'y', deadline: 'Price to GCs by Nov 12', why: 'Hard deadline' },
+    { action: 'Every open quote: push the Dec 31 tax deadline', branch: 'All', deal: '—', why: 'Year-end' },
+  ] });
+  let f = (await req('GET', '/api/pipeline/summary?week=2026-11-30')).body.report.focus;
+  assert.equal(f[0].opportunity_id, bid.id);
+  assert.equal(f[0].action, 'price to every GC', 'business name not repeated next to the link');
+  assert.equal(f[0].branch, bid.branch, 'branch comes live from the prospect');
+  assert.equal(f[0].deadline, 'Price to GCs by Nov 12', 'written do-by note kept');
+  assert.equal(f[0].opp.status, bid.status);
+  assert.equal(f[1].opportunity_id, null, 'general items stay general');
+  assert.equal(f[1].branch, 'All');
+
+  // Saving with explicit links; changes on the prospect show up immediately.
+  await req('PUT', '/api/pipeline/reports/2026-11-30', { focus: [{ opportunity_id: bistro.id, action: 'Site visit', why: 'Order window' }, ...f] });
+  await req('PATCH', `/api/opportunities/${bistro.id}`, { assigned_rep: 'Alex', status: 'Quoted' });
+  f = (await req('GET', '/api/pipeline/summary?week=2026-11-30')).body.report.focus;
+  assert.deepEqual([f[0].opp.business, f[0].opp.assigned_rep, f[0].opp.status, f[0].action], ['Bistro One (new location)', 'Alex', 'Quoted', 'Site visit']);
+  assert.equal(f.length, 3);
+
+  // Add straight from a prospect; no duplicates.
+  const added = await req('POST', '/api/pipeline/reports/2026-12-07/focus', { opportunity_id: bid.id });
+  assert.equal(added.status, 201);
+  assert.equal((await req('POST', '/api/pipeline/reports/2026-12-07/focus', { opportunity_id: bid.id })).status, 409);
+  assert.equal((await req('POST', '/api/pipeline/reports/2026-12-07/focus', { opportunity_id: 99999 })).status, 404);
+  // A scan may refer to a business by name instead of id.
+  await req('POST', '/api/pipeline/scan', { week: '2026-12-14', opportunities: [], report: { headline: 'h', focus: [{ business: 'Bistro One (new location)', action: 'Call the owner' }], plays: [], risks: [], sources: [] } });
+  assert.equal((await req('GET', '/api/pipeline/summary?week=2026-12-14')).body.report.focus[0].opportunity_id, bistro.id);
+  // Excel export writes the business name with the action.
+  const x = await req('GET', '/api/pipeline/export.xlsx?week=2026-11-30');
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.load(x.body);
+  const cells = []; wb.getWorksheet('Executive Summary').eachRow(r => r.eachCell(c => cells.push(String(c.value))));
+  assert.ok(cells.includes('Bistro One: Site visit'));
 });

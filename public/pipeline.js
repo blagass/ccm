@@ -38,10 +38,36 @@ function wireImport() {
   };
 }
 
+// One row of the "Where to focus" table. Linked rows show live prospect details; general rows are free text.
+function focusRow(f, i, n) {
+  const ed = (k, val, ph) => `<td contenteditable="true" class="editable" data-k="${k}" data-ph="${esc(ph || '')}">${esc(val || '')}</td>`;
+  const o = f.opp;
+  const moves = `<button class="btn sm" data-move="-1" data-i="${i}" ${i ? '' : 'disabled'} title="Move up">↑</button><button class="btn sm" data-move="1" data-i="${i}" ${i < n - 1 ? '' : 'disabled'} title="Move down">↓</button><button class="btn sm danger" data-rm="${i}" title="Remove">✕</button>`;
+  if (o) {
+    const derived = o.deadline ? fmtShortDate(o.deadline) : (o.decision_timeline || '');
+    return `<tr data-i="${i}" data-opp="${o.id}"><td><b>${i + 1}</b></td>
+      <td class="prospect">${priPill(o.priority)} <a href="#/pipeline/${o.id}"><b>${esc(o.business)}</b></a><div class="muted small">${LIST_SHORT[o.list_type] || ''}</div></td>
+      ${ed('action', f.action, 'What to do')}
+      <td class="small">${esc(o.branch)}</td>
+      <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${esc(fmtShortDate(o.deadline))}</span>` : ''}<div contenteditable="true" class="editable" data-k="note" data-ph="${esc(o.deadline ? 'add a do-by note' : derived || 'add a date')}">${esc(f.note)}</div></td>
+      <td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
+      <td class="small">${o.assigned_rep ? esc(o.assigned_rep) : '<span class="pill bad">unassigned</span>'}<div class="muted">${esc(o.status)}</div></td>
+      ${ed('why', f.why, 'Why it matters')}
+      <td class="no-print" style="white-space:nowrap">${moves}</td></tr>`;
+  }
+  return `<tr data-i="${i}"><td><b>${i + 1}</b></td>
+    <td class="prospect"><span class="pill">General</span><input class="no-print link-in" list="focus-opps" data-link="${i}" placeholder="link to a prospect…"></td>
+    ${ed('action', f.action, 'What to do')}${ed('branch', f.branch, 'Branch')}
+    <td class="small"><div contenteditable="true" class="editable" data-k="note" data-ph="add a date">${esc(f.note ?? f.deadline)}</div></td>
+    ${ed('deal', f.deal, '—')}<td class="small muted">—</td>${ed('why', f.why, 'Why it matters')}
+    <td class="no-print" style="white-space:nowrap">${moves}</td></tr>`;
+}
+const fmtShortDate = d => new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
 // ---------- Executive Summary ----------
 async function execSummary(q) {
   const m = await pmeta();
-  const s = await GET('/pipeline/summary' + (q.get('week') ? '?week=' + q.get('week') : ''));
+  const [s, openOpps] = await Promise.all([GET('/pipeline/summary' + (q.get('week') ? '?week=' + q.get('week') : '')), GET('/opportunities?open=true')]);
   const t = s.tiles, rep = s.report;
   if (!s.weeks.length) {
     view.innerHTML = `<div class="head"><h1>Executive Summary</h1>${importButton()}</div>
@@ -65,13 +91,19 @@ async function execSummary(q) {
   </div>
   <p class="muted small">Pipeline figures add up the rough deal-size ranges on new leads (estimates, not quotes); chain accounts are longer-term and not included. Counts update as reps assign leads and change Status.</p>
 
-  <h3 class="band">Where to focus this week (in order) ${rep.focus.length ? '' : '<span class="pill warn" style="font-weight:400">suggested — Hot items by deadline, then deal size</span>'}</h3>
-  <div class="card"><table id="focus"><thead><tr><th>#</th><th>Action</th><th>Branch</th><th>Deadline</th><th>Est. deal</th><th>Why it matters</th><th class="no-print"></th></tr></thead><tbody>
-    ${focus.map((f, i) => `<tr data-i="${i}"><td><b>${i + 1}</b></td>${['action', 'branch', 'deadline', 'deal', 'why'].map(k => `<td contenteditable="true" class="editable" data-k="${k}">${esc(f[k])}</td>`).join('')}
-      <td class="no-print" style="white-space:nowrap">${f.id ? `<a class="btn sm" href="#/pipeline/${f.id}">Open</a>` : ''}<button class="btn sm danger" data-rm="${i}">✕</button></td></tr>`).join('')}
+  <h3 class="band">Where to focus this week (in order) ${rep.focus.length ? '' : '<span class="pill warn" style="font-weight:400;font-family:var(--sans);letter-spacing:0;text-transform:none">suggested — Hot prospects by deadline, then deal size</span>'}</h3>
+  <div class="card"><table id="focus" class="focus"><thead><tr><th>#</th><th>Prospect</th><th>Action</th><th>Branch</th><th>Deadline</th><th>Est. deal</th><th>Owner · status</th><th>Why it matters</th><th class="no-print"></th></tr></thead><tbody>
+    ${focus.map((f, i) => focusRow(f, i, focus.length)).join('') || '<tr><td colspan="9" class="muted">Nothing on the focus list yet.</td></tr>'}
   </tbody></table>
-  <div class="row no-print" style="margin-top:10px;justify-content:flex-start"><button class="btn sm auto" id="addfocus">+ Add focus item</button><button class="btn sm primary auto" id="savefocus">Save focus list</button>
-  ${rep.focus.length ? '<button class="btn sm auto" id="resetfocus">Replace with suggestions</button>' : ''}</div></div>
+  <div class="row no-print focus-add">
+    <input id="focus-pick" list="focus-opps" placeholder="Add a prospect to the focus list — start typing a business…">
+    <button class="btn sm primary auto" id="addfocus-opp">Add prospect</button>
+    <button class="btn sm auto" id="addfocus-general">+ General item</button>
+    ${rep.focus.length ? '<button class="btn sm auto" id="resetfocus">Replace with suggestions</button>' : ''}
+    <span class="muted small auto">Edits save automatically.</span>
+  </div>
+  <datalist id="focus-opps">${openOpps.map(o => `<option value="${esc(o.business)}">${esc(o.priority)} · ${esc(o.branch)}</option>`).join('')}</datalist>
+  </div>
 
   <div class="grid g2" style="margin-top:16px">
     <div class="card"><h2>Pipeline by branch (new leads + switch prospects)</h2><table><tr><th>Branch</th><th>Leads</th><th>Hot</th><th>Switch</th><th>Est. low</th><th>Est. high</th></tr>
@@ -99,12 +131,48 @@ async function execSummary(q) {
 
   wireImport();
   $('#week').onchange = e => location.hash = '#/?week=' + e.target.value;
-  const readFocus = () => $$('#focus tbody tr').map(tr => Object.fromEntries($$('[data-k]', tr).map(td => [td.dataset.k, td.innerText.trim()]))).filter(f => f.action);
-  const saveFocus = async focusList => { await PUT('/pipeline/reports/' + s.week, { focus: focusList }); toast('Focus list saved'); route(); };
-  $('#savefocus').onclick = () => saveFocus(readFocus());
-  $('#addfocus').onclick = () => { const f = readFocus(); f.push({ action: 'New action', branch: '', deadline: '', deal: '', why: '' }); saveFocus(f); };
-  if ($('#resetfocus')) $('#resetfocus').onclick = () => confirm('Replace the written focus list with automatic suggestions?') && saveFocus([]);
+  // Focus list: rows carry their prospect id; branch, deal, owner and status come from the prospect.
+  const readFocus = () => $$('#focus tbody tr[data-i]').map(tr => {
+    const v = k => ($(`[data-k=${k}]`, tr)?.innerText || '').trim();
+    const item = { action: v('action'), why: v('why'), deadline: v('note') };
+    if (tr.dataset.opp) item.opportunity_id = Number(tr.dataset.opp); else { item.branch = v('branch'); item.deal = v('deal'); }
+    return item;
+  });
+  const saveFocus = async (list, { quiet } = {}) => {
+    await PUT('/pipeline/reports/' + s.week, { focus: list });
+    toast(rep.focus.length ? 'Focus list saved' : "Saved — this week's focus list is now yours to edit");
+    if (!quiet || !rep.focus.length) route();
+  };
+  $$('#focus [contenteditable]').forEach(el => {
+    el.dataset.orig = el.innerText.trim();
+    el.onblur = () => { if (el.innerText.trim() !== el.dataset.orig) { el.dataset.orig = el.innerText.trim(); saveFocus(readFocus(), { quiet: true }); } };
+    el.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.blur(); } };
+  });
+  $$('[data-move]').forEach(b => b.onclick = () => {
+    const f = readFocus(), i = Number(b.dataset.i), j = i + Number(b.dataset.move);
+    if (j < 0 || j >= f.length) return;
+    [f[i], f[j]] = [f[j], f[i]]; saveFocus(f);
+  });
   $$('[data-rm]').forEach(b => b.onclick = () => { const f = readFocus(); f.splice(Number(b.dataset.rm), 1); saveFocus(f); });
+  $$('[data-link]').forEach(inp => inp.onchange = () => {
+    const o = openOpps.find(x => x.business === inp.value.trim());
+    if (!o) return toast('Pick a prospect from the list', true);
+    const f = readFocus(), i = Number(inp.dataset.link);
+    f[i] = { opportunity_id: o.id, action: f[i].action, why: f[i].why, deadline: f[i].deadline };
+    saveFocus(f);
+  });
+  $('#addfocus-opp').onclick = () => {
+    const name = $('#focus-pick').value.trim();
+    const o = openOpps.find(x => x.business === name);
+    if (!o) return toast('Pick a prospect from the list', true);
+    const f = readFocus();
+    if (f.some(x => x.opportunity_id === o.id)) return toast(`${o.business} is already on the list`, true);
+    f.push({ opportunity_id: o.id, action: o.next_step || 'Make first contact', why: o.stage || '' });
+    saveFocus(f);
+  };
+  $('#focus-pick').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#addfocus-opp').click(); } };
+  $('#addfocus-general').onclick = () => { const f = readFocus(); f.push({ action: 'New action', branch: '', deal: '', why: '' }); saveFocus(f); };
+  if ($('#resetfocus')) $('#resetfocus').onclick = () => confirm('Replace the written focus list with automatic suggestions?') && saveFocus([]);
   const readReport = () => ({
     headline: $('#headline').innerText.trim(),
     plays: $$('#plays .play').map(p => ({ title: $('[data-k=title]', p).innerText.trim(), detail: $('[data-k=detail]', p).innerText.trim() })).filter(p => p.title),
@@ -206,7 +274,7 @@ async function opportunityBrief(id) {
   const dl = daysUntil(o.deadline);
   view.innerHTML = `<datalist id="reps">${m.reps.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
   <div class="head no-print"><a href="#/pipeline?list=${o.list_type}" class="muted">← ${esc(m.list_types[o.list_type])}</a>
-    <div class="row" style="flex:0 0 auto"><button class="btn" onclick="print()">Print brief</button><button class="btn" id="toggle-edit">Edit all fields</button><button class="btn danger" id="del">Delete</button></div></div>
+    <div class="row" style="flex:0 0 auto"><button class="btn" id="add-focus">★ Add to this week's focus</button><button class="btn" onclick="print()">Print brief</button><button class="btn" id="toggle-edit">Edit all fields</button><button class="btn danger" id="del">Delete</button></div></div>
   <div class="card brief">
     <div class="brief-title"><div><h1>${esc(o.business)}</h1><div class="muted">${esc(o.location)} • Branch: ${esc(o.branch)} • ${esc(m.list_types[o.list_type])} • first seen week of ${fmtWeek(o.first_seen_week)}${o.last_seen_week !== o.first_seen_week ? `, last seen ${fmtWeek(o.last_seen_week)}` : ''}</div></div>
       <span class="pill ${PRI_CLASS[o.priority]}" style="font-size:15px;padding:4px 12px">${esc(o.priority.toUpperCase())} ${o.list_type === 'switch' ? 'SWITCH PROSPECT' : o.list_type === 'chain' ? 'ACCOUNT' : 'LEAD'}</span></div>
@@ -239,6 +307,11 @@ async function opportunityBrief(id) {
     catch (err) { toast(err.message, true); }
   });
   if (typeof renderLeadTasks === 'function') renderLeadTasks($('#lead-tasks'), o);
+  $('#add-focus').onclick = async () => {
+    const week = m.weeks[0] || m.current_week;
+    try { await POST(`/pipeline/reports/${week}/focus`, { opportunity_id: o.id }); toast(`Added to the focus list for the week of ${fmtWeek(week)}`); }
+    catch (err) { toast(err.message, true); }
+  };
   $('#toggle-edit').onclick = () => { $('#editor').classList.toggle('hidden'); $('#editor').scrollIntoView({ behavior: 'smooth' }); };
   $('#save').onclick = async () => { try { await PATCH('/opportunities/' + id, collect()); toast('Saved'); route(); } catch (err) { toast(err.message, true); } };
   $('#del').onclick = async () => { if (confirm(`Delete ${o.business}?`)) { await DEL('/opportunities/' + id); location.hash = '#/pipeline'; } };

@@ -172,3 +172,15 @@ ul.tasks{list-style:none;padding:0;margin:0}
 .seg-toggle{display:inline-flex;border:1px solid #d0d5dd;border-radius:7px;overflow:hidden;flex:0 0 auto}
 .seg-toggle a{padding:7px 14px;color:var(--navy);font-weight:700}.seg-toggle a.on{background:var(--navy);color:#fff}
 .dnum .pill{white-space:nowrap;font-size:10px;padding:0 6px}
+
+/* focus list */
+table.focus td{font-size:13px;vertical-align:top}
+table.focus td.prospect{min-width:180px}
+table.focus td.prospect a b{color:var(--navy)}
+table.focus div.editable{min-height:20px;display:block;padding:2px 4px;margin:-2px -4px}table.focus td.editable{padding:9px 10px}
+table.focus td[contenteditable]:empty::before,table.focus div[contenteditable]:empty::before{content:attr(data-ph);color:#a3acb8;font-style:italic}
+table.focus .btn.sm{padding:3px 7px}table.focus .btn[disabled]{opacity:.3;cursor:default}
+.link-in{margin-top:6px;padding:4px 6px;font-size:12px}
+.focus-add{margin-top:12px;justify-content:flex-start}
+.focus-add #focus-pick{max-width:460px}
+@media print{table.focus [contenteditable]:empty{display:none}}

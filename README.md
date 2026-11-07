@@ -36,7 +36,7 @@ A self-hosted alternative to HubSpot for **forms, lead management, marketing aut
 - **Import the weekly `.xlsx`** (the `Curtis_Weekly_Leads_YYYY-MM-DD.xlsx` layout). New businesses are added. Businesses already being tracked get their scan details refreshed, but **reps' updates are kept** (assigned rep, status, relationship intel, notes), so each week's file adds to the history instead of replacing it.
 - A business can only be on one list. If it shows up on two tabs in the same file, it's kept on the first and the duplicate is reported.
 - **Executive Summary** shows live tiles (new / Hot / switch / chain counts, estimated pipeline, Hot leads not yet assigned, leads still at "New"), plus:
-  - the "where to focus this week" list: editable, or suggested automatically by deadline and deal size;
+  - the "where to focus this week" list: each item links to a prospect (branch, deal size, owner and status shown live), with an editable action, do-by note and reason; general items without a prospect are allowed; reorder, add from the picker or from a lead's brief; suggested automatically by deadline and deal size when none is written;
   - pipeline by branch;
   - bigger plays, risks and lead sources;
   - rep workload and a status funnel.

@@ -382,6 +382,15 @@ api.get('/pipeline/meta', (req, res) => res.json({
 }));
 api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
 api.put('/pipeline/reports/:week', (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
+api.post('/pipeline/reports/:week/focus', (req, res) => {
+  const o = pipeline.get(Number(req.body.opportunity_id));
+  if (!o) return res.status(404).json({ error: 'Prospect not found' });
+  const cur = pipeline.getReport(req.params.week).focus || [];
+  if (cur.some(f => Number(f.opportunity_id) === o.id)) return res.status(409).json({ error: `${o.business} is already on this week's focus list` });
+  const saved = pipeline.saveReport(req.params.week, { focus: [...cur, { opportunity_id: o.id, action: String(req.body.action || o.next_step || 'Make first contact'), why: String(req.body.why || o.stage || '') }] });
+  pipeline.log(o.id, 'focus', `Added to the focus list for the week of ${req.params.week}`, req.user.name);
+  res.status(201).json(saved);
+});
 api.get('/opportunities', (req, res) => res.json(pipeline.list(req.query)));
 api.post('/opportunities', (req, res) => res.status(201).json(pipeline.create(req.body, { week: req.body.week, actor: req.user.name })));
 api.get('/opportunities/:id', (req, res) => {
