@@ -556,10 +556,12 @@ async function broadcasts() {
 
 // ---------- Settings ----------
 async function settingsView() {
-  const s = await GET('/settings');
+  const [s, pm] = await Promise.all([GET('/settings'), GET('/pipeline/meta')]);
+  const owners = s.branch_owners || {};
   view.innerHTML = `<div class="head"><h1>Settings</h1></div>
   <div class="grid g2">
     <div class="card"><h2>General</h2>
+      <div class="field"><label class="f">Your name (for the owner login: shown in the welcome greeting and on activity)</label><input data-s="owner_name" value="${esc(s.owner_name || '')}" placeholder="e.g. Brandon Lagasse"></div>
       <div class="field"><label class="f">Company name (used in email footers)</label><input data-s="company_name" value="${esc(s.company_name)}"></div>
       <div class="field"><label class="f">From address</label><input data-s="from_email" value="${esc(s.from_email)}"></div>
       <p class="muted">Email delivery: ${s.smtp_configured ? '<span class="pill ok">SMTP configured</span>' : '<span class="pill warn">Dev mode — set SMTP_HOST to deliver</span>'}<br>Public URL: <code>${esc(s.base_url)}</code> (set BASE_URL for tracking links)</p>
@@ -572,10 +574,24 @@ async function settingsView() {
       <p class="muted" style="font-size:12px">Use the "Adjust lead score" workflow step for custom rules (e.g. +20 when tagged "pricing-page").</p>
     </div>
   </div>
+  <div class="card" style="margin-top:16px"><h2>Branch owners</h2>
+    <p class="muted" style="margin-top:-6px">New leads from the weekly scan, imports and the "Add lead" form go to the branch owner automatically unless someone is picked. You can enter a first name before the person has an account. When "John" accepts his invite as "John Carter", his leads switch to his full name.</p>
+    <div class="grid g3">${(s.branches || []).map(b => `<div class="field"><label class="f">${esc(b)}</label><input data-owner="${esc(b)}" list="owner-names" value="${esc(owners[b] || '')}" placeholder="Unassigned"></div>`).join('')}</div>
+    <datalist id="owner-names">${pm.reps.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
+    <div class="row" style="justify-content:flex-start"><button class="btn auto" id="apply-owners">Assign open, unassigned leads to these owners now</button><span class="muted small auto">Leads that already have a rep are never changed.</span></div>
+  </div>
   <button class="btn primary" id="s-save" style="margin-top:16px">Save settings</button>`;
   $('#s-save').onclick = async () => {
     const body = {}; $$('[data-s]').forEach(i => body[i.dataset.s] = i.type === 'number' ? Number(i.value) : i.value);
+    body.branch_owners = Object.fromEntries($$('[data-owner]').map(i => [i.dataset.owner, i.value.trim()]).filter(([, v]) => v));
     await PUT('/settings', body); toast('Settings saved');
+  };
+  $('#apply-owners').onclick = async () => {
+    $('#s-save').click();
+    await new Promise(r => setTimeout(r, 300));
+    const r = await POST('/pipeline/assign-by-branch');
+    const parts = Object.entries(r.assigned).map(([who, n]) => `${n} to ${who}`);
+    toast(parts.length ? `Assigned ${parts.join(', ')}` : 'Nothing to assign: every open lead in those branches already has a rep');
   };
 }
 

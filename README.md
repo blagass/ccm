@@ -46,7 +46,10 @@ A self-hosted alternative to HubSpot for **forms, lead management, marketing aut
 - **Export to Excel** rebuilds the weekly workbook in the same format: Executive Summary with live formulas, the three list tabs with gold rep columns and a Status dropdown, Personas, Outreach Drafts, a brief tab per Hot lead, and Sources & Gaps.
 
 **Daily welcome**
-- Once a day, after signing in, a friendly popup greets each person by name and suggests up to three quick wins from their own work: carried-over tasks, deadlines in the next week, Hot leads still at "New", and (for admins) Hot leads nobody has picked up. Busy weeks are framed calmly. Click your name in the sidebar to see it again.
+- Once a day, after signing in, a friendly popup greets each person by name and suggests up to three quick wins. Reps get quick wins from their own work: carried-over tasks, deadlines in the next week, Hot leads still at "New", Admins get the team picture instead: Hot leads to route, this week's new leads, team deadlines with who owns them, and Hot leads still at "New". Busy weeks are framed calmly. Click your name in the sidebar to see it again.
+
+**Branch owners**
+- In Settings, set an owner per branch (e.g. Boise: John). New leads from the weekly scan, imports and the Add lead form are assigned to the branch owner automatically unless a rep is picked, and one click assigns existing unassigned open leads. Owners can be entered by first name before they have an account; when they accept their invite, their leads and tasks switch to their full name.
 
 **Team accounts**
 - Admins invite people from **Users**. Each invite is a single-use link that expires after 7 days; it's also emailed when SMTP is configured. The invited person picks their own name and password.

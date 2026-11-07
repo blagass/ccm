@@ -64,6 +64,44 @@ function mondayOf(date = new Date()) {
 }
 
 function get(id) { return parse(db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id)); }
+
+// ---------- Branch owners: new and unassigned leads go to whoever owns the branch ----------
+function branchOwner(branchText) {
+  const b = primaryBranch(branchText);
+  return (b && (getSettings().branch_owners || {})[b]) || '';
+}
+function autoAssign(id, actor) {
+  const o = get(id);
+  if (!o || o.assigned_rep) return false;
+  const owner = branchOwner(o.branch);
+  if (!owner) return false;
+  db.prepare("UPDATE opportunities SET assigned_rep = ?, updated_at = datetime('now') WHERE id = ?").run(owner, id);
+  log(id, 'assign', `Assigned to ${owner} (${primaryBranch(o.branch)} branch owner)`, actor && !/^scan |^manual$/.test(actor) ? actor : null);
+  return true;
+}
+// Apply branch owners to every open lead that has nobody yet. Returns counts per owner.
+function assignByBranch(actor) {
+  const out = {};
+  for (const o of db.prepare("SELECT id FROM opportunities WHERE (assigned_rep IS NULL OR assigned_rep = '') AND status NOT IN ('Won','Lost','Not a fit')").all()) {
+    if (autoAssign(o.id, actor)) { const who = get(o.id).assigned_rep; out[who] = (out[who] || 0) + 1; }
+  }
+  return out;
+}
+// Owners are often set by first name before the person has an account ("John"). When John accepts his
+// invite as "John Carter", his leads, tasks and branch-owner entries switch to the full name.
+function claimPlaceholderName(fullName) {
+  const first = String(fullName || '').trim().split(/\s+/)[0];
+  if (!first || first.toLowerCase() === String(fullName).trim().toLowerCase()) return 0;
+  const settings = getSettings();
+  const owners = { ...(settings.branch_owners || {}) };
+  let changed = false;
+  for (const [b, n] of Object.entries(owners)) if (String(n).trim().toLowerCase() === first.toLowerCase()) { owners[b] = fullName; changed = true; }
+  if (!changed) return 0;   // only claim names an admin set up as branch owners
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('branch_owners', JSON.stringify(owners));
+  const n = db.prepare("UPDATE opportunities SET assigned_rep = ? WHERE lower(trim(assigned_rep)) = lower(?)").run(fullName, first).changes;
+  try { db.prepare("UPDATE tasks SET assigned_to = ? WHERE lower(trim(assigned_to)) = lower(?)").run(fullName, first); } catch { /* tasks table not created yet */ }
+  return n;
+}
 try { db.exec('ALTER TABLE opp_activities ADD COLUMN user_name TEXT'); } catch { /* column exists */ }
 function log(id, type, summary, user = null) { db.prepare('INSERT INTO opp_activities (opportunity_id, type, summary, user_name) VALUES (?, ?, ?, ?)').run(id, type, summary, user); }
 
@@ -90,6 +128,7 @@ function create(input, { week, actor = 'manual' } = {}) {
   const cols = Object.keys(row);
   const info = db.prepare(`INSERT INTO opportunities (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map(c => row[c] ?? null));
   log(info.lastInsertRowid, 'created', `Added to ${LIST_TYPES[row.list_type]}${/^scan |^manual$/.test(actor) ? ` (${actor})` : ''}`, /^scan |^manual$/.test(actor) ? null : actor);
+  if (!row.assigned_rep) autoAssign(Number(info.lastInsertRowid), actor);
   return get(info.lastInsertRowid);
 }
 
@@ -136,6 +175,7 @@ function upsertFromScan(input, week) {
   if (existing.status && existing.status !== 'New') delete data.status;
   for (const k of ['outreach_to', 'outreach_subject', 'outreach_body', 'outreach_channel']) if (!data[k]) delete data[k];
   const row = update(existing.id, data, { actor: `scan ${week}` });
+  if (!get(existing.id).assigned_rep) autoAssign(existing.id, `scan ${week}`);
   if (week > existing.last_seen_week) db.prepare('UPDATE opportunities SET last_seen_week = ? WHERE id = ?').run(week, existing.id);
   return { action: 'updated', row: get(existing.id) };
 }
@@ -294,5 +334,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 
 module.exports = {
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, personas, upsertPersona, personasFor, activity, log,
 };

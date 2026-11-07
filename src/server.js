@@ -29,7 +29,7 @@ const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 // ---------- Auth ----------
 // Sessions are "<userId>.<expiry>.<hmac>". userId 0 is the built-in owner login (ADMIN_PASSWORD),
 // which always works so the account can't be locked out. Disabled users lose access immediately.
-const OWNER = { id: 0, name: 'Owner', email: '', role: 'admin' };
+const ownerUser = () => ({ id: 0, name: getSettings().owner_name || 'Owner', email: '', role: 'admin' });
 function sign(v) { return crypto.createHmac('sha256', SECRET).update(v).digest('hex'); }
 function makeSession(uid) { const v = `${uid}.${Date.now() + 7 * 86400e3}`; return `${v}.${sign(v)}`; }
 function sessionUser(tok) {
@@ -38,7 +38,7 @@ function sessionUser(tok) {
   const [uid, exp, sig] = parts;
   const expected = sign(`${uid}.${exp}`);
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) || Number(exp) < Date.now()) return null;
-  if (uid === '0') return OWNER;
+  if (uid === '0') return ownerUser();
   const u = users.get(Number(uid));
   return u && !u.disabled ? u : null;
 }
@@ -76,7 +76,7 @@ app.post('/api/login', (req, res) => {
   const pw = String(req.body.password || '');
   let user = null;
   if (email) user = users.authenticate(email, pw);
-  else if (pw.length === ADMIN_PASSWORD.length && crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(ADMIN_PASSWORD))) user = OWNER;
+  else if (pw.length === ADMIN_PASSWORD.length && crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(ADMIN_PASSWORD))) user = ownerUser();
   if (!user) { recordFailure(req.ip); return res.status(401).json({ error: email ? 'Wrong email or password' : 'Wrong password' }); }
   setSession(req, res, user.id);
   res.json({ ok: true, user });
@@ -100,6 +100,7 @@ app.post('/api/invites/:token/accept', (req, res) => {
   if (tooManyFailures(req.ip)) return res.status(429).json({ error: 'Too many attempts. Try again later.' });
   try {
     const user = users.acceptInvite(req.params.token, req.body || {});
+    pipeline.claimPlaceholderName(user.name);
     setSession(req, res, user.id);
     res.json({ ok: true, user });
   } catch (e) { if (e.status === 410) recordFailure(req.ip); throw e; }
@@ -383,6 +384,7 @@ api.get('/pipeline/meta', (req, res) => res.json({
 }));
 api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
 api.put('/pipeline/reports/:week', (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
+api.post('/pipeline/assign-by-branch', requireAdmin, (req, res) => res.json({ assigned: pipeline.assignByBranch(req.user.name) }));
 api.post('/pipeline/reports/:week/focus', (req, res) => {
   const o = pipeline.get(Number(req.body.opportunity_id));
   if (!o) return res.status(404).json({ error: 'Prospect not found' });
@@ -501,6 +503,7 @@ api.patch('/users/:id', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user.id && (req.body.role === 'rep' || req.body.disabled)) return res.status(400).json({ error: "You can't demote or disable your own account" });
   const u = users.update(id, req.body || {});
+  if (u && req.body?.name) pipeline.claimPlaceholderName(u.name);
   u ? res.json(u) : res.status(404).json({ error: 'Not found' });
 });
 api.delete('/users/:id', requireAdmin, (req, res) => {

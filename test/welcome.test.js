@@ -66,5 +66,23 @@ test('admins are nudged to hand out unassigned Hot leads', async () => {
   const w = (await owner('GET', '/api/welcome?today=2026-11-09&hour=19')).body;
   assert.equal(w.greeting, 'Good evening!', 'owner login has no personal name');
   assert.ok(w.stats.unassigned_hot >= 6);
-  assert.ok(w.wins.some(x => /Hand out \d+ Hot leads/.test(x.text)));
+  assert.ok(w.wins.some(x => /Route \d+ Hot leads that don't have an owner/.test(x.text)));
+  assert.equal(w.role, 'admin');
+});
+
+test('owner login can have a display name; first names are capitalized', async () => {
+  await owner('PUT', '/api/settings', { owner_name: 'brandon lagasse' });
+  assert.equal((await owner('GET', '/api/welcome?today=2026-11-09&hour=9')).body.greeting, 'Good morning, Brandon!');
+});
+
+test('an admin (marketing coordinator) gets the team picture', async () => {
+  const inv = await owner('POST', '/api/users/invite', { email: 'v.reeves@curtisresteq.com', role: 'admin' });
+  const val = client();
+  await val('POST', `/api/invites/${inv.body.link.split('/#/accept/')[1]}/accept`, { name: 'Val Reeves', password: 'marketing-rocks-1' });
+  const w = (await val('GET', '/api/welcome?today=2026-11-09&hour=10')).body;
+  assert.equal(w.greeting, 'Good morning, Val!');
+  assert.equal(w.role, 'admin');
+  assert.match(w.wins[0].text, /^Route \d+ Hot leads/, 'routing unassigned Hot leads comes first');
+  assert.match(w.wins.map(x => x.text).join(' '), /deadline .* (has it|still needs an owner)/, 'team deadlines say who owns them');
+  assert.match(w.closing, /steering|pointed/);
 });
