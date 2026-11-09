@@ -208,3 +208,7 @@ table.focus .btn.sm{padding:3px 7px}table.focus .btn[disabled]{opacity:.3;cursor
 @keyframes wfade{from{opacity:0}to{opacity:1}}
 @keyframes wpop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
 @media print{.welcome-backdrop{display:none!important}}
+
+table.focus .grp-opp{padding:3px 0 5px;border-bottom:1px dashed var(--line)}table.focus .grp-opp:last-of-type{border-bottom:0}
+table.focus [data-split]{margin-top:6px}
+.link-toggle{padding:2px 8px!important;font-size:12px}

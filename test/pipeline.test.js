@@ -295,3 +295,22 @@ test('focus list items link to prospects', async () => {
   const cells = []; wb.getWorksheet('Executive Summary').eachRow(r => r.eachCell(c => cells.push(String(c.value))));
   assert.ok(cells.includes('Bistro One: Site visit'));
 });
+
+test('a focus item naming several leads shows each lead (and can be split)', async () => {
+  const mk = async b => (await req('POST', '/api/opportunities', b)).body;
+  const a = await mk({ business: 'UN/COMMON Cocktail Cafe (Campfire Hotel)', branch: 'Bend', priority: 'Hot', next_step: 'Bar fill-in before Nov 20' });
+  const b = await mk({ business: 'Kyoto Sushi and Hibachi', branch: 'Bend' });
+  await mk({ business: 'Sushi Dash', branch: 'Portland' });
+  await req('PUT', '/api/pipeline/reports/2027-01-04', { focus: [
+    { action: 'Bend: espresso demo to UN/COMMON (Campfire Hotel); visit Kyoto Sushi in Redmond', branch: 'Bend', why: 'Openings' },
+    { action: 'Year-end tax push on every open quote', branch: 'All' },
+  ] });
+  const f = (await req('GET', '/api/pipeline/summary?week=2027-01-04')).body.report.focus;
+  assert.deepEqual(f[0].opps.map(o => o.id), [a.id, b.id], 'both named leads, in order, and not "Sushi Dash"');
+  assert.equal(f[0].opportunity_id, null);
+  assert.deepEqual(f[1].opps, [], 'general item stays general');
+  // Splitting = saving one linked item per lead.
+  await req('PUT', '/api/pipeline/reports/2027-01-04', { focus: [{ opportunity_id: a.id, action: 'Bar fill-in before Nov 20' }, { opportunity_id: b.id, action: 'Visit' }, { action: 'Year-end tax push on every open quote' }] });
+  const g = (await req('GET', '/api/pipeline/summary?week=2027-01-04')).body.report.focus;
+  assert.deepEqual(g.map(x => x.opportunity_id), [a.id, b.id, null]);
+});

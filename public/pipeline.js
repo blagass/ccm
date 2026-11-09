@@ -55,8 +55,19 @@ function focusRow(f, i, n) {
       ${ed('why', f.why, 'Why it matters')}
       <td class="no-print" style="white-space:nowrap">${moves}</td></tr>`;
   }
+  if (f.opps && f.opps.length > 1) {
+    // One item that names several leads: show each lead, with a one-click split into separate items.
+    return `<tr data-i="${i}" data-group="${f.opps.map(x => x.id).join(',')}"><td><b>${i + 1}</b></td>
+      <td class="prospect">${f.opps.map(x => `<div class="grp-opp">${priPill(x.priority)} <a href="#/pipeline/${x.id}"><b>${esc(x.business.split(/\s[–(]/)[0])}</b></a>
+        <div class="muted small">${x.assigned_rep ? esc(x.assigned_rep) : '<span class="pill bad">unassigned</span>'} · ${esc(x.status)}${x.deadline ? ` · <span class="pill ${daysUntil(x.deadline) <= 7 ? 'bad' : 'warn'}">${esc(fmtShortDate(x.deadline))}</span>` : ''}</div></div>`).join('')}
+        <button class="btn sm no-print" data-split="${i}" title="Make one focus item per lead">Split into ${f.opps.length} items</button></td>
+      ${ed('action', f.action, 'What to do')}${ed('branch', f.branch, 'Branch')}
+      <td class="small"><div contenteditable="true" class="editable" data-k="note" data-ph="add a date">${esc(f.note ?? f.deadline)}</div></td>
+      <td class="small muted">${f.opps.length} leads</td><td class="small muted">see each lead</td>${ed('why', f.why, 'Why it matters')}
+      <td class="no-print" style="white-space:nowrap">${moves}</td></tr>`;
+  }
   return `<tr data-i="${i}"><td><b>${i + 1}</b></td>
-    <td class="prospect"><span class="pill">General</span><input class="no-print link-in" list="focus-opps" data-link="${i}" placeholder="link to a prospect…"></td>
+    <td class="prospect"><span class="pill">General</span> <button class="btn sm no-print link-toggle" data-linktoggle="${i}" title="Link this item to a prospect">＋ Link</button><input class="no-print link-in hidden" list="focus-opps" data-link="${i}" placeholder="Type a business…"></td>
     ${ed('action', f.action, 'What to do')}${ed('branch', f.branch, 'Branch')}
     <td class="small"><div contenteditable="true" class="editable" data-k="note" data-ph="add a date">${esc(f.note ?? f.deadline)}</div></td>
     ${ed('deal', f.deal, '—')}<td class="small muted">—</td>${ed('why', f.why, 'Why it matters')}
@@ -159,6 +170,15 @@ async function execSummary(q) {
     if (!o) return toast('Pick a prospect from the list', true);
     const f = readFocus(), i = Number(inp.dataset.link);
     f[i] = { opportunity_id: o.id, action: f[i].action, why: f[i].why, deadline: f[i].deadline };
+    saveFocus(f);
+  });
+  $$('[data-linktoggle]').forEach(b => b.onclick = () => { const inp = $(`[data-link="${b.dataset.linktoggle}"]`); inp.classList.remove('hidden'); b.classList.add('hidden'); inp.focus(); });
+  $$('[data-split]').forEach(b => b.onclick = () => {
+    const f = readFocus(), i = Number(b.dataset.split);
+    const row = $(`#focus tbody tr[data-i="${i}"]`);
+    const ids = row.dataset.group.split(',').map(Number);
+    const items = ids.map(id => { const o = openOpps.find(x => x.id === id); return { opportunity_id: id, action: (o && o.next_step) || f[i].action, why: f[i].why }; });
+    f.splice(i, 1, ...items);
     saveFocus(f);
   });
   $('#addfocus-opp').onclick = () => {

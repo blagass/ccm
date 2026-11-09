@@ -233,6 +233,31 @@ function autoLink(text, opps) {
   return hits.length === 1 ? hits[0].id : null;
 }
 
+// Place names and generic words that must never count as a business name on their own.
+const STOP = new Set(['city', 'the', 'new', 'old', 'portland', 'salem', 'keizer', 'eugene', 'springfield', 'medford', 'boise', 'bend', 'redmond',
+  'meridian', 'nampa', 'caldwell', 'eagle', 'ashland', 'grants', 'grants pass', 'sisters', 'sunriver', 'idaho', 'oregon', 'school', 'district',
+  'public', 'restaurant', 'restaurants', 'kitchen', 'cafe', 'bar', 'grill', 'senior', 'living', 'state', 'county', 'national', 'every', 'open']);
+// All tracked businesses named anywhere in a piece of text: by full name, or by a distinctive first one or two
+// words when no other tracked business starts the same way ("Handel's", "Glisan Station", "UN/COMMON").
+function mentions(text, opps) {
+  const t = ' ' + businessKey(String(text || '').replace(/[()]/g, ' ')) + ' ';
+  const hits = [];
+  for (const o of opps) {
+    const words = (o.business_key || '').split(' ').filter(Boolean);
+    if (!words.length) continue;
+    const cands = [words.join(' ')];
+    const two = words.slice(0, 2).join(' '), one = words[0];
+    // A short form only counts if no other tracked business uses those words anywhere in its name.
+    const uniq = pre => opps.filter(x => (' ' + x.business_key + ' ').includes(' ' + pre + ' ')).length === 1;
+    if (words.length > 2 && two.replace(' ', '').length >= 6 && !STOP.has(two) && uniq(two)) cands.push(two);
+    if (words.length > 1 && one.length >= 5 && !STOP.has(one) && uniq(one)) cands.push(one);
+    let at = -1;
+    for (const c of cands) { const i = t.indexOf(' ' + c + ' '); if (i >= 0 && (at < 0 || i < at)) at = i; }
+    if (at >= 0) hits.push({ o, at });
+  }
+  return hits.sort((a, b) => a.at - b.at).map(h => h.o);
+}
+
 function shortDeadline(o) {
   if (o.deadline) return new Date(o.deadline + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   return o.decision_timeline || '';
@@ -242,14 +267,22 @@ function enrichFocus(items) {
   const opps = db.prepare('SELECT * FROM opportunities').all();
   const byId = Object.fromEntries(opps.map(o => [o.id, o]));
   return (items || []).map(f => {
-    const id = f.opportunity_id && byId[f.opportunity_id] ? f.opportunity_id : autoLink(f.action, opps);
+    let id = f.opportunity_id && byId[f.opportunity_id] ? f.opportunity_id : autoLink(f.action, opps);
+    if (!id && !f.opportunity_id) {
+      const named = mentions(f.action, opps);
+      if (named.length === 1) id = named[0].id;
+      else if (named.length > 1) {
+        const mini = o => ({ id: o.id, business: o.business, priority: o.priority, status: o.status, assigned_rep: o.assigned_rep, list_type: o.list_type, branch: o.branch, deal_size: o.deal_size, deadline: o.deadline, next_step: o.next_step });
+        return { ...f, note: f.deadline || '', opportunity_id: null, opp: null, opps: named.map(mini), label: f.action };
+      }
+    }
     const o = id ? byId[id] : null;
-    if (!o) return { ...f, note: f.deadline || '', opportunity_id: null, opp: null, label: f.action };
+    if (!o) return { ...f, note: f.deadline || '', opportunity_id: null, opp: null, opps: [], label: f.action };
     const action = f.action || o.next_step || 'Make first contact';
     // Spreadsheet text often starts with the business name; don't repeat it next to the prospect link.
     const stripped = action.includes(':') && autoLink(action.split(':')[0], [o]) === o.id ? action.slice(action.indexOf(':') + 1).trim() : action;
     return {
-      ...f, note: f.deadline || '', opportunity_id: o.id, action: stripped,
+      ...f, note: f.deadline || '', opportunity_id: o.id, opps: [], action: stripped,
       label: `${o.business.split(/\s[–(]/)[0]}: ${stripped}`,
       branch: o.branch, deal: (o.deal_size || '').split(' (')[0], deadline: f.deadline || shortDeadline(o),
       opp: { id: o.id, business: o.business, priority: o.priority, status: o.status, assigned_rep: o.assigned_rep, list_type: o.list_type, branch: o.branch, deal_size: o.deal_size, deadline: o.deadline, decision_timeline: o.decision_timeline },
@@ -334,5 +367,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 
 module.exports = {
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, personas, upsertPersona, personasFor, activity, log,
 };
