@@ -1,6 +1,6 @@
 {
   "name": "leadflow",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha",
   "description": "Self-hosted forms, lead management and marketing automation (HubSpot alternative)",
   "main": "src/server.js",
   "scripts": {

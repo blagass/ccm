@@ -564,7 +564,7 @@ async function settingsView() {
       <div class="field"><label class="f">Your name (for the owner login: shown in the welcome greeting and on activity)</label><input data-s="owner_name" value="${esc(s.owner_name || '')}" placeholder="e.g. Brandon Lagasse"></div>
       <div class="field"><label class="f">Company name (used in email footers)</label><input data-s="company_name" value="${esc(s.company_name)}"></div>
       <div class="field"><label class="f">From address</label><input data-s="from_email" value="${esc(s.from_email)}"></div>
-      <p class="muted">Email delivery: ${s.smtp_configured ? '<span class="pill ok">SMTP configured</span>' : '<span class="pill warn">Dev mode — set SMTP_HOST to deliver</span>'}<br>Public URL: <code>${esc(s.base_url)}</code> (set BASE_URL for tracking links)</p>
+      <p class="muted">Email delivery: ${s.smtp_configured ? '<span class="pill ok">SMTP configured</span>' : '<span class="pill warn">Dev mode — set SMTP_HOST to deliver</span>'}<br>Public URL: <code>${esc(s.base_url)}</code> (set BASE_URL for tracking links)<br>Version: <b>${s.app_version === '1.0.0-alpha' ? 'Alpha 1.0' : esc(s.app_version)}</b></p>
     </div>
     <div class="card"><h2>Lead scoring</h2>
       <div class="field"><label class="f">Points per form submission</label><input type="number" data-s="score_form_submit" value="${s.score_form_submit}"></div>

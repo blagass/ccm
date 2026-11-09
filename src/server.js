@@ -456,7 +456,8 @@ api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
 }));
 
 // Settings
-api.get('/settings', (req, res) => res.json({ ...getSettings(), smtp_configured: !!process.env.SMTP_HOST, base_url: mailer.BASE_URL() }));
+const APP_VERSION = require('../package.json').version;
+api.get('/settings', (req, res) => res.json({ ...getSettings(), smtp_configured: !!process.env.SMTP_HOST, base_url: mailer.BASE_URL(), app_version: APP_VERSION }));
 api.put('/settings', requireAdmin, (req, res) => res.json(setSettings(req.body)));
 
 // Daily welcome popup
