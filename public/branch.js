@@ -71,16 +71,8 @@ async function branchView(name, q) {
 
   <h3 class="band">${esc(b.branch)} leads</h3>
   <div class="card">
-    <div class="tabs no-print" style="margin-top:-6px">${Object.entries(tabs).map(([k, [label, fn]]) => `<a href="${link('tab', k)}" class="${k === tab ? 'active' : ''}">${label} (${b.leads.filter(fn).length})</a>`).join('')}</div>
-    ${leads.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned rep</th><th class="gold">Status</th></tr></thead><tbody>
-      ${leads.map(o => `<tr class="click pri-${o.priority}" data-href="#/pipeline/${o.id}">
-        <td>${priPill(o.priority)}<div class="muted small">${LIST_SHORT[o.list_type]}</div></td>
-        <td><b>${esc(o.business)}</b><div class="muted small">${esc(o.location)}${o.branch !== b.branch ? ` · ${esc(o.branch)}` : ''}</div></td>
-        <td class="small">${esc(o.stage)}</td><td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
-        <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
-        <td><input list="reps" class="inline" data-id="${o.id}" data-f="assigned_rep" value="${esc(o.assigned_rep)}" placeholder="assign…"></td>
-        <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select></td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="empty">No leads here.</div>'}
+    <div class="tabs no-print" style="margin-top:-6px">${Object.entries(tabs).map(([k, [label, fn]]) => `<a href="${link('tab', k)}" data-btab="${k}" class="${k === tab ? 'active' : ''}">${label} (${b.leads.filter(fn).length})</a>`).join('')}</div>
+    <div id="branch-leads">${leadsTable(leads)}</div>
   </div>
 
   <div class="grid g2" style="margin-top:16px">
@@ -91,12 +83,39 @@ async function branchView(name, q) {
   <div class="card" style="margin-top:16px"><h2>Recent activity</h2>
     ${b.activity.length ? `<ul class="timeline">${b.activity.map(a => `<li><span class="t">${fmt(a.created_at)}</span><span><a href="#/pipeline/${a.opportunity_id}">${short(a.business)}</a>: ${a.user_name ? `<b>${esc(a.user_name)}:</b> ` : ''}${esc(a.summary)}</span></li>`).join('')}</ul>` : '<div class="muted">No activity yet.</div>'}</div>`;
 
+  // Switching tabs only redraws the table and updates the address, so the page doesn't jump.
+  $$('[data-btab]').forEach(el => el.onclick = e => {
+    e.preventDefault();
+    const k = el.dataset.btab;
+    $$('[data-btab]').forEach(x => x.classList.toggle('active', x === el));
+    $('#branch-leads').innerHTML = leadsTable(b.leads.filter(tabs[k][1]));
+    history.replaceState(null, '', link('tab', k));
+    wireInline();
+  });
   $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.nav === 'branch'));
   $('#bweek').onchange = e => location.hash = link('week', e.target.value);
-  $$('.inline').forEach(el => el.onchange = async () => {
-    try { await PATCH('/opportunities/' + el.dataset.id, { [el.dataset.f]: el.value }); toast('Saved'); }
-    catch (err) { toast(err.message, true); }
-  });
+  function wireInline() {
+    $$('#branch-leads .inline').forEach(el => el.onchange = async () => {
+      try {
+        await PATCH('/opportunities/' + el.dataset.id, { [el.dataset.f]: el.value });
+        const o = b.leads.find(x => x.id === Number(el.dataset.id)); if (o) o[el.dataset.f] = el.value;   // keep tab counts honest
+        toast('Saved');
+      } catch (err) { toast(err.message, true); }
+    });
+  }
+  wireInline();
+
+  function leadsTable(list) {
+    return list.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned rep</th><th class="gold">Status</th></tr></thead><tbody>
+      ${list.map(o => `<tr class="click pri-${o.priority}" data-href="#/pipeline/${o.id}">
+        <td>${priPill(o.priority)}<div class="muted small">${LIST_SHORT[o.list_type]}</div></td>
+        <td><b>${esc(o.business)}</b><div class="muted small">${esc(o.location)}${o.branch !== b.branch ? ` · ${esc(o.branch)}` : ''}</div></td>
+        <td class="small">${esc(o.stage)}</td><td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
+        <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
+        <td><input list="reps" class="inline" data-id="${o.id}" data-f="assigned_rep" value="${esc(o.assigned_rep)}" placeholder="assign…"></td>
+        <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select></td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="empty">No leads here.</div>';
+  }
 
   function tile([label, n, href, cls]) {
     return `<${href ? `a href="${href}"` : 'div'} class="card stat ${cls || ''}"><div class="n">${n}</div><div class="l">${label}</div></${href ? 'a' : 'div'}>`;

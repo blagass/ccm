@@ -90,6 +90,7 @@ const routes = [
   [/^\/users$/, usersView, 'users'],
   [/^\/accept\/([\w-]+)$/, acceptInvite, ''],
 ];
+let lastPath = null;
 async function route() {
   const [path, query] = (location.hash.slice(1) || '/').split('?');
   for (const [re, fn, nav] of routes) {
@@ -97,9 +98,13 @@ async function route() {
     if (m) {
       $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.nav === nav));
       view.onclick = view.oninput = null; // editors install their own handlers
-      view.innerHTML = '<div class="empty">Loading…</div>';
+      // Same page again (a save, a filter, a week switch): keep what's on screen and where you were.
+      const samePage = path === lastPath, y = window.scrollY;
+      lastPath = path;
+      if (!samePage) view.innerHTML = '<div class="empty">Loading…</div>';
       try { await fn(...m.slice(1), new URLSearchParams(query)); }
       catch (err) { if (err.message !== 'Unauthorized') view.innerHTML = `<div class="card err">${esc(err.message)}</div>`; }
+      if (samePage) window.scrollTo(0, y); else window.scrollTo(0, 0);
       return;
     }
   }
