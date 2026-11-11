@@ -10,6 +10,32 @@ const fmtWeek = w => w ? new Date(w + 'T00:00:00Z').toLocaleDateString(undefined
 const daysUntil = d => d ? Math.ceil((new Date(d + 'T23:59:59') - Date.now()) / 864e5) : null;
 const priPill = p => `<span class="pill ${PRI_CLASS[p] || ''}">${esc(p)}</span>`;
 const multiline = s => esc(s).replace(/\n/g, '<br>');
+// "Assigned branch" control: a dropdown for admins/managers, plain text for reps. The person shows underneath.
+const canMoveLeads = () => ME && (ME.role === 'admin' || ME.role === 'manager');
+function currentBranchOf(o, m) {
+  const t = String(o.branch || '').toLowerCase();
+  const direct = m.branches.find(b => t.startsWith(b.toLowerCase()));
+  if (direct) return direct;
+  const merged = Object.keys(m.branch_merges || {}).find(f => t.startsWith(f.toLowerCase()));
+  return merged ? m.branch_merges[merged] : '';
+}
+function branchCell(o, m) {
+  const cur = currentBranchOf(o, m);
+  const who = `<div class="muted small">→ ${o.assigned_rep ? esc(o.assigned_rep) : '<span class="pill bad">no one yet</span>'}</div>`;
+  if (!canMoveLeads()) return `<div class="small"><b>${esc(cur || o.branch || '—')}</b></div>${who}`;
+  return `<select class="inline branch-move" data-move-id="${o.id}">
+    ${cur ? '' : `<option value="" selected>${esc(o.branch || 'No branch')}</option>`}
+    ${m.branches.map(b => `<option value="${esc(b)}" ${b === cur ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>${who}`;
+}
+function wireBranchMoves(root, onMoved) {
+  $$('.branch-move', root).forEach(sel => sel.onchange = async () => {
+    try {
+      const o = await POST(`/opportunities/${sel.dataset.moveId}/branch`, { branch: sel.value });
+      toast(`Moved to ${sel.value}${o.assigned_rep ? ` (${o.assigned_rep})` : ''}`);
+      onMoved && onMoved(o);
+    } catch (err) { toast(err.message, true); }
+  });
+}
 
 routes.unshift(
   [/^\/$/, execSummary, 'exec'],
@@ -228,15 +254,15 @@ async function pipelineList(q) {
       <label class="auto small"><input type="checkbox" name="open" value="true" style="width:auto" ${params.get('open') === 'true' ? 'checked' : ''}> Open only</label>
       <button class="btn auto">Filter</button>
     </form>
-    ${rows.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Branch</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned rep</th><th class="gold">Status</th></tr></thead><tbody>
+    ${rows.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned branch</th><th class="gold">Status</th></tr></thead><tbody>
       ${rows.map(o => `<tr class="click pri-${o.priority}" data-href="#/pipeline/${o.id}">
         <td>${priPill(o.priority)}${!listType ? `<div class="muted small">${LIST_SHORT[o.list_type]}</div>` : ''}</td>
-        <td><b>${esc(o.business)}</b><div class="muted small">${esc(o.location)}</div></td><td>${esc(o.branch)}</td><td class="small">${esc(o.stage)}</td>
+        <td><b>${esc(o.business)}</b><div class="muted small">${esc(o.location)}${o.branch && !m.branches.some(b => o.branch === b) ? ` · ${esc(o.branch)}` : ''}</div></td><td class="small">${esc(o.stage)}</td>
         <td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
         <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
-        <td><input list="reps" class="inline" data-id="${o.id}" data-f="assigned_rep" value="${esc(o.assigned_rep)}" placeholder="assign…"></td>
+        <td>${branchCell(o, m)}</td>
         <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select></td></tr>`).join('')}
-    </tbody></table></div><p class="muted small">${rows.length} shown. Assigned rep and Status save as soon as you change them.</p>`
+    </tbody></table></div><p class="muted small">${rows.length} shown. ${canMoveLeads() ? 'Assigned branch and ' : ''}Status save${canMoveLeads() ? '' : 's'} as soon as you change them. Moving a lead to another branch hands it to that branch's owner.</p>`
     : '<div class="empty">Nothing matches these filters.</div>'}
   </div>`;
   wireImport();
@@ -247,10 +273,11 @@ async function pipelineList(q) {
     if (!p.has('open')) p.set('open', 'false');
     location.hash = '#/pipeline?' + p;
   };
-  $$('.inline').forEach(el => el.onchange = async () => {
+  $$('.inline:not(.branch-move)').forEach(el => el.onchange = async () => {
     try { await PATCH('/opportunities/' + el.dataset.id, { [el.dataset.f]: el.value }); toast('Saved'); if (el.dataset.f === 'assigned_rep') pmeta(true); }
     catch (err) { toast(err.message, true); }
   });
+  wireBranchMoves(view, () => route());
 }
 
 // ---------- One-page brief ----------
@@ -299,7 +326,7 @@ async function opportunityBrief(id) {
     <div class="brief-title"><div><h1>${esc(o.business)}</h1><div class="muted">${esc(o.location)} • Branch: ${esc(o.branch)} • ${esc(m.list_types[o.list_type])} • first seen week of ${fmtWeek(o.first_seen_week)}${o.last_seen_week !== o.first_seen_week ? `, last seen ${fmtWeek(o.last_seen_week)}` : ''}</div></div>
       <span class="pill ${PRI_CLASS[o.priority]}" style="font-size:15px;padding:4px 12px">${esc(o.priority.toUpperCase())} ${o.list_type === 'switch' ? 'SWITCH PROSPECT' : o.list_type === 'chain' ? 'ACCOUNT' : 'LEAD'}</span></div>
     <div class="row quick">
-      <label>Assigned rep<input list="reps" data-q="assigned_rep" value="${esc(o.assigned_rep)}" placeholder="[unassigned]"></label>
+      <label>Assigned branch<div class="qb">${branchCell(o, m)}</div></label>
       <label>Status<select data-q="status">${opts(m.statuses, o.status)}</select></label>
       <label>Priority<select data-q="priority">${opts(m.priorities, o.priority)}</select></label>
       ${o.deadline ? `<label>Deadline<div class="pill ${dl <= 7 ? 'bad' : 'warn'}" style="font-size:14px;padding:6px 10px">${esc(o.deadline)} (${dl < 0 ? 'past' : dl + ' days'})</div></label>` : ''}
@@ -322,6 +349,7 @@ async function opportunityBrief(id) {
     <div class="row" style="margin-bottom:10px"><textarea id="note" placeholder="Log a call, visit or email…" style="min-height:56px"></textarea><button class="btn auto" id="addnote">Add note</button></div>
     <ul class="timeline">${o.activity.map(a => `<li><span class="t">${fmt(a.created_at)}</span><span class="${a.type === 'note' ? 'note' : ''}">${a.user_name ? `<b>${esc(a.user_name)}:</b> ` : ''}${esc(a.summary)}</span></li>`).join('')}</ul></div>`;
 
+  wireBranchMoves(view, () => route());
   $$('[data-q]').forEach(el => el.onchange = async () => {
     try { await PATCH('/opportunities/' + id, { [el.dataset.q]: el.value }); toast('Saved'); if (['priority', 'status'].includes(el.dataset.q)) route(); }
     catch (err) { toast(err.message, true); }

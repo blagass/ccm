@@ -78,3 +78,25 @@ test('changing roles: manager of another branch, then back to rep', async () => 
   assert.deepEqual([r2.body.role, r2.body.branch], ['rep', null]);
   assert.equal((await kevin('GET', '/api/welcome?today=2026-11-10&hour=8')).body.role, 'rep');
 });
+
+test('Assigned branch: admins and managers move leads; reps cannot; the scan keeps the move', async () => {
+  await owner('PUT', '/api/settings', { branch_owners: { Medford: 'Kevin Moore', Boise: 'John', Bend: 'Scott', Springfield: 'Nyles' } });
+  const jay = (await owner('GET', '/api/opportunities?q=Jay')).body[0];
+  // Admin moves Jay's on 4th from Medford to Bend → Scott
+  const r = await owner('POST', `/api/opportunities/${jay.id}/branch`, { branch: 'bend' });
+  assert.deepEqual([r.body.branch, r.body.assigned_rep], ['Bend', 'Scott']);
+  assert.equal((await owner('POST', `/api/opportunities/${jay.id}/branch`, { branch: 'Atlantis' })).status, 400);
+  const brief = (await owner('GET', `/api/opportunities/${jay.id}`)).body;
+  assert.ok(brief.activity.some(a => a.summary === 'Moved from Medford to Bend (now with Scott)'));
+  // A rep can't move leads (either route)
+  const inv = await owner('POST', '/api/users/invite', { email: 'rita@curtisresteq.com', role: 'rep' });
+  const rita = client();
+  await rita('POST', `/api/invites/${token(inv.body.link)}/accept`, { name: 'Rita Rep', password: 'rita-password-1' });
+  assert.equal((await rita('POST', `/api/opportunities/${jay.id}/branch`, { branch: 'Boise' })).status, 403);
+  assert.equal((await rita('PATCH', `/api/opportunities/${jay.id}`, { branch: 'Boise' })).status, 403);
+  assert.equal((await rita('PATCH', `/api/opportunities/${jay.id}`, { status: 'Contacted' })).status, 200, 'reps still update status');
+  // Next week's scan re-sends it as Medford: the move sticks
+  await owner('POST', '/api/pipeline/scan', { week: '2026-11-16', opportunities: [{ business: "Jay's on 4th", branch: 'Medford', stage: 'Opened' }] });
+  const after = (await owner('GET', `/api/opportunities/${jay.id}`)).body;
+  assert.deepEqual([after.branch, after.assigned_rep, after.stage], ['Bend', 'Scott', 'Opened']);
+});

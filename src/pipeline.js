@@ -108,6 +108,20 @@ function setBranchOwner(branch, name) {
   assignByBranch(name);
 }
 
+try { db.exec('ALTER TABLE opportunities ADD COLUMN branch_locked INTEGER DEFAULT 0'); } catch { /* exists */ }
+// Move a lead to another branch: it goes to that branch's owner, and the weekly scan won't move it back.
+function moveToBranch(id, branch, actor) {
+  const o = get(id);
+  if (!o) return null;
+  const target = (getSettings().branches || []).find(b => b.toLowerCase() === String(branch || '').toLowerCase());
+  if (!target) throw err('Pick one of the branches');
+  const owner = (getSettings().branch_owners || {})[target] || '';
+  const from = primaryBranch(o.branch) || o.branch || 'no branch';
+  db.prepare("UPDATE opportunities SET branch = ?, assigned_rep = ?, branch_locked = 1, updated_at = datetime('now') WHERE id = ?").run(target, owner, id);
+  if (from !== target) log(id, 'move', `Moved from ${from} to ${target}${owner ? ` (now with ${owner})` : ''}`, actor || null);
+  return get(id);
+}
+
 // Apply branch owners to every open lead that has nobody yet. Returns counts per owner.
 function assignByBranch(actor) {
   const out = {};
@@ -201,6 +215,7 @@ function upsertFromScan(input, week) {
   }
   const data = { ...input };
   for (const f of REP_FIELDS) if (existing[f] && existing[f] !== 'New') delete data[f];
+  if (existing.branch_locked) delete data.branch;   // a person moved it to another branch; keep that
   if (existing.status && existing.status !== 'New') delete data.status;
   for (const k of ['outreach_to', 'outreach_subject', 'outreach_body', 'outreach_channel']) if (!data[k]) delete data[k];
   const row = update(existing.id, data, { actor: `scan ${week}` });
@@ -399,5 +414,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 
 module.exports = {
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, setBranchOwner, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, setBranchOwner, moveToBranch, personas, upsertPersona, personasFor, activity, log,
 };

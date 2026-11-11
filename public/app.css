@@ -236,3 +236,6 @@ ul.upcoming .when{min-width:96px;font-weight:700;color:var(--navy);font-size:13p
   .branch-tabs{display:none}
   input.inline,select.inline{border:0;background:none;padding:0;min-width:0;appearance:none;-webkit-appearance:none;font-size:12px}
 }
+
+select.branch-move{min-width:130px;font-weight:700;color:var(--navy)}
+.quick .qb{display:flex;flex-direction:column;gap:2px;font-weight:400}.quick .qb select{width:190px}

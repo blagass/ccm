@@ -383,7 +383,7 @@ api.get('/pipeline/meta', (req, res) => res.json({
   list_types: pipeline.LIST_TYPES, priorities: pipeline.PRIORITIES, statuses: pipeline.STATUSES, columns: pipeline.COLUMNS,
   branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...users.names(), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
   weeks: pipeline.weeks(), current_week: pipeline.mondayOf(),
-  branch_owners: getSettings().branch_owners || {}, my_branches: branchPage.branchesOwnedBy(req.user.name, req.user.role === 'manager' ? req.user.branch : null),
+  branch_owners: getSettings().branch_owners || {}, branch_merges: getSettings().branch_merges || {}, my_branches: branchPage.branchesOwnedBy(req.user.name, req.user.role === 'manager' ? req.user.branch : null),
 }));
 api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
 api.get('/branches/:branch', (req, res) => res.json(branchPage.branchSummary(req.params.branch, { week: req.query.week, today: req.query.today })));
@@ -405,7 +405,18 @@ api.get('/opportunities/:id', (req, res) => {
   if (!o) return res.status(404).json({ error: 'Not found' });
   res.json({ ...o, personas: pipeline.personasFor(o.persona), activity: pipeline.activity(o.id) });
 });
+// Moving a lead between branches is for admins and branch managers.
+const canMove = u => u && (u.role === 'admin' || u.role === 'manager');
+api.post('/opportunities/:id/branch', (req, res) => {
+  if (!canMove(req.user)) return res.status(403).json({ error: 'Only admins and branch managers can move leads between branches' });
+  const o = pipeline.moveToBranch(Number(req.params.id), req.body?.branch, req.user.name);
+  o ? res.json(o) : res.status(404).json({ error: 'Not found' });
+});
 api.patch('/opportunities/:id', (req, res) => {
+  const cur = pipeline.get(Number(req.params.id));
+  if (cur && req.body && req.body.branch !== undefined && req.body.branch !== cur.branch && !canMove(req.user)) {
+    return res.status(403).json({ error: 'Only admins and branch managers can move leads between branches' });
+  }
   const o = pipeline.update(Number(req.params.id), req.body, { actor: req.user.name });
   o ? res.json(o) : res.status(404).json({ error: 'Not found' });
 });

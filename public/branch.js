@@ -97,7 +97,16 @@ async function branchView(name, q) {
   $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.nav === 'branch'));
   $('#bweek').onchange = e => location.hash = link('week', e.target.value);
   function wireInline() {
-    $$('#branch-leads .inline').forEach(el => el.onchange = async () => {
+    // Moving a lead out of this branch takes it off this page.
+    wireBranchMoves($('#branch-leads'), moved => {
+      const i = b.leads.findIndex(x => x.id === moved.id);
+      if (i >= 0) { if (currentBranchOf(moved, m) === b.branch) b.leads[i] = moved; else b.leads.splice(i, 1); }
+      const active = $('[data-btab].active')?.dataset.btab || 'open';
+      $('#branch-leads').innerHTML = leadsTable(b.leads.filter(tabs[active][1]));
+      $$('[data-btab]').forEach(x => { const [label, fn] = tabs[x.dataset.btab]; x.textContent = `${label} (${b.leads.filter(fn).length})`; });
+      wireInline();
+    });
+    $$('#branch-leads .inline:not(.branch-move)').forEach(el => el.onchange = async () => {
       try {
         await PATCH('/opportunities/' + el.dataset.id, { [el.dataset.f]: el.value });
         const o = b.leads.find(x => x.id === Number(el.dataset.id)); if (o) o[el.dataset.f] = el.value;   // keep tab counts honest
@@ -108,13 +117,13 @@ async function branchView(name, q) {
   wireInline();
 
   function leadsTable(list) {
-    return list.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned rep</th><th class="gold">Status</th></tr></thead><tbody>
+    return list.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned branch</th><th class="gold">Status</th></tr></thead><tbody>
       ${list.map(o => `<tr class="click pri-${o.priority}" data-href="#/pipeline/${o.id}">
         <td>${priPill(o.priority)}<div class="muted small">${LIST_SHORT[o.list_type]}</div></td>
         <td><b>${esc(o.business)}</b><div class="muted small">${esc(o.location)}${o.branch !== b.branch ? ` · ${esc(o.branch)}` : ''}</div></td>
         <td class="small">${esc(o.stage)}</td><td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
         <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
-        <td><input list="reps" class="inline" data-id="${o.id}" data-f="assigned_rep" value="${esc(o.assigned_rep)}" placeholder="assign…"></td>
+        <td>${branchCell(o, m)}</td>
         <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select></td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">No leads here.</div>';
   }
