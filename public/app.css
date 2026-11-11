@@ -224,3 +224,8 @@ ul.upcoming li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 ul.upcoming .when{min-width:96px;font-weight:700;color:var(--navy);font-size:13px}
 .side{overflow-y:auto}
 .head h1 .incl{font-family:var(--sans);font-size:15px;color:var(--teal);letter-spacing:0;vertical-align:middle;margin-left:6px}
+/* Branch selector: orange so it stands out (navy text on #dc8c00 keeps it readable) */
+.branch-tabs a{background:#dc8c00;border-color:#dc8c00;color:var(--navy);font-weight:400;box-shadow:0 2px 6px rgba(220,140,0,.25)}
+.branch-tabs a:hover:not(.on){background:#c67e00;border-color:#c67e00;color:var(--navy)}
+.branch-tabs a.on{background:var(--navy);border-color:#dc8c00;color:#fff;box-shadow:0 0 0 2px #dc8c00}
+.branch-tabs a .mine{color:var(--navy)}.branch-tabs a.on .mine{color:#dc8c00}
