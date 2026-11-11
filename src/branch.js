@@ -29,7 +29,8 @@ function branchSummary(name, { week, today } = {}) {
   const owner = (getSettings().branch_owners || {})[branch] || '';
 
   const all = db.prepare('SELECT * FROM opportunities').all().map(parse);
-  const mine = all.filter(o => inBranch(o, branch));
+  const pendingHere = all.filter(o => inBranch(o, branch) && o.review_status === 'pending' && !CLOSED.includes(o.status)).length;
+  const mine = all.filter(o => inBranch(o, branch) && o.review_status !== 'pending');
   const open = mine.filter(o => !CLOSED.includes(o.status));
   const nonChain = open.filter(o => o.list_type !== 'chain');
   const sum = (arr, k) => arr.reduce((a, o) => a + (o[k] || 0), 0);
@@ -89,7 +90,7 @@ function branchSummary(name, { week, today } = {}) {
     WHERE a.opportunity_id IN (${[...ids].join(',')}) ORDER BY a.id DESC LIMIT 20`).all() : [];
 
   return {
-    branch, owner, includes: pipeline.branchAliases(branch).slice(1), week, weeks: pipeline.weeks(), today, tiles, company_wide_open: companyWide,
+    branch, owner, pending_review: pendingHere, includes: pipeline.branchAliases(branch).slice(1), week, weeks: pipeline.weeks(), today, tiles, company_wide_open: companyWide,
     reps: Object.values(reps).sort((a, b) => (a.rep === '(unassigned)') - (b.rep === '(unassigned)') || b.hot - a.hot || b.open - a.open),
     status_funnel: statusFunnel, focus, suggested_focus: suggested, upcoming, overdue, activity,
     leads: mine.sort((a, b) => ['Hot', 'Warm', 'Watch'].indexOf(a.priority) - ['Hot', 'Warm', 'Watch'].indexOf(b.priority) || (a.deadline || '9999').localeCompare(b.deadline || '9999') || a.id - b.id),

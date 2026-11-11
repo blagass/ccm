@@ -15,6 +15,7 @@ test.before(async () => {
   server = app.listen(0); await new Promise(r => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
   await req('POST', '/api/login', { password: 'owner-pass-123' });
+  await req('PUT', '/api/settings', { review_new_leads: false }); // these tests cover direct routing
   await req('PUT', '/api/settings', { branch_owners: { Boise: 'John', Bend: 'Scott' } });
 });
 test.after(() => server.close());

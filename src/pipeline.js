@@ -112,6 +112,44 @@ function setBranchOwner(branch, name) {
 }
 
 try { db.exec('ALTER TABLE opportunities ADD COLUMN branch_locked INTEGER DEFAULT 0'); } catch { /* exists */ }
+// Review queue: leads from the weekly scan start 'pending' and stay with Operators/Admins until approved.
+try { db.exec("ALTER TABLE opportunities ADD COLUMN review_status TEXT DEFAULT 'approved'"); } catch { /* exists */ }
+try { db.exec('ALTER TABLE opportunities ADD COLUMN review_note TEXT'); } catch { /* exists */ }
+const reviewOn = () => getSettings().review_new_leads !== false;
+
+// Approve a pending lead: it goes to the chosen (or suggested) branch and that branch's owner.
+function approve(id, branch, actor) {
+  const o = get(id);
+  if (!o) return null;
+  if (branch && branch !== primaryBranch(o.branch)) moveToBranch(id, branch, actor);
+  db.prepare("UPDATE opportunities SET review_status = 'approved', review_note = NULL, updated_at = datetime('now') WHERE id = ?").run(id);
+  const after = get(id);
+  if (!after.assigned_rep) autoAssign(id, actor);
+  const final = get(id);
+  const b = primaryBranch(final.branch);
+  log(id, 'review', `Approved${b ? ` for ${b}` : ''}${final.assigned_rep ? ` (now with ${final.assigned_rep})` : ''}`, actor || null);
+  return final;
+}
+function reviewNote(id, note, actor) {
+  const o = get(id);
+  if (!o) return null;
+  db.prepare("UPDATE opportunities SET review_note = ?, updated_at = datetime('now') WHERE id = ?").run(String(note || '').slice(0, 1000), id);
+  log(id, 'review', `Needs more info: ${note}`, actor || null);
+  return get(id);
+}
+// Put every open lead back in the review queue (used once to start review from a clean slate).
+function resetOpenToReview(actor) {
+  const rows = db.prepare(`SELECT id FROM opportunities WHERE status NOT IN ${CLOSED_SQL} AND (review_status IS NULL OR review_status != 'pending')`).all();
+  for (const r of rows) {
+    db.prepare("UPDATE opportunities SET review_status = 'pending', assigned_rep = '', updated_at = datetime('now') WHERE id = ?").run(r.id);
+    log(r.id, 'review', 'Moved to the review queue', actor || null);
+  }
+  return rows.length;
+}
+function reviewQueue() {
+  return db.prepare(`SELECT * FROM opportunities WHERE review_status = 'pending' AND status NOT IN ${CLOSED_SQL}
+    ORDER BY CASE priority WHEN 'Hot' THEN 0 WHEN 'Warm' THEN 1 ELSE 2 END, deadline IS NULL, deadline, id`).all().map(parse);
+}
 // Move a lead to another branch: it goes to that branch's owner, and the weekly scan won't move it back.
 function moveToBranch(id, branch, actor) {
   const o = get(id);
@@ -128,7 +166,7 @@ function moveToBranch(id, branch, actor) {
 // Apply branch owners to every open lead that has nobody yet. Returns counts per owner.
 function assignByBranch(actor) {
   const out = {};
-  for (const o of db.prepare(`SELECT id FROM opportunities WHERE (assigned_rep IS NULL OR assigned_rep = '') AND status NOT IN ${CLOSED_SQL}`).all()) {
+  for (const o of db.prepare(`SELECT id FROM opportunities WHERE (assigned_rep IS NULL OR assigned_rep = '') AND status NOT IN ${CLOSED_SQL} AND (review_status IS NULL OR review_status != 'pending')`).all()) {
     if (autoAssign(o.id, actor)) { const who = get(o.id).assigned_rep; out[who] = (out[who] || 0) + 1; }
   }
   return out;
@@ -174,7 +212,9 @@ function create(input, { week, actor = 'manual' } = {}) {
   const cols = Object.keys(row);
   const info = db.prepare(`INSERT INTO opportunities (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map(c => row[c] ?? null));
   log(info.lastInsertRowid, 'created', `Added to ${LIST_TYPES[row.list_type]}${/^scan |^manual$/.test(actor) ? ` (${actor})` : ''}`, /^scan |^manual$/.test(actor) ? null : actor);
-  if (!row.assigned_rep) autoAssign(Number(info.lastInsertRowid), actor);
+  if (/^scan /.test(actor) && reviewOn() && !row.assigned_rep) {
+    db.prepare("UPDATE opportunities SET review_status = 'pending' WHERE id = ?").run(info.lastInsertRowid);
+  } else if (!row.assigned_rep) autoAssign(Number(info.lastInsertRowid), actor);
   return get(info.lastInsertRowid);
 }
 
@@ -223,13 +263,15 @@ function upsertFromScan(input, week) {
   if (existing.status && existing.status !== 'New') delete data.status;
   for (const k of ['outreach_to', 'outreach_subject', 'outreach_body', 'outreach_channel']) if (!data[k]) delete data[k];
   const row = update(existing.id, data, { actor: `scan ${week}` });
-  if (!get(existing.id).assigned_rep) autoAssign(existing.id, `scan ${week}`);
+  if (!get(existing.id).assigned_rep && existing.review_status !== 'pending') autoAssign(existing.id, `scan ${week}`);
   if (week > existing.last_seen_week) db.prepare('UPDATE opportunities SET last_seen_week = ? WHERE id = ?').run(week, existing.id);
   return { action: 'updated', row: get(existing.id) };
 }
 
-function list({ list_type, priority, branch, status, rep, week, q, open } = {}) {
+function list({ list_type, priority, branch, status, rep, week, q, open, review } = {}) {
   const where = [], vals = [];
+  if (review === 'pending') where.push("review_status = 'pending'");
+  else if (review === 'hide') where.push("(review_status IS NULL OR review_status != 'pending')");
   if (list_type) { where.push('list_type = ?'); vals.push(list_type); }
   if (priority) { where.push('priority = ?'); vals.push(priority); }
   if (branch) {
@@ -419,5 +461,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 module.exports = {
   CLOSED, CLOSED_SQL, SKIP_STATUSES,
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, setBranchOwner, moveToBranch, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, setBranchOwner, moveToBranch, approve, reviewNote, resetOpenToReview, reviewQueue, personas, upsertPersona, personasFor, activity, log,
 };

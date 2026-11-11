@@ -93,7 +93,7 @@ function mondaysBetween(from, to) {
 
 // Everything on the calendar between two dates (inclusive). `mine` filters tasks to one person
 // (plus unassigned ones); pipeline items are filtered to leads assigned to them or to nobody.
-function calendar({ from, to, mine, today, branch }) {
+function calendar({ from, to, mine, today, branch, hidePending }) {
   if (!isDate(from) || !isDate(to) || from > to) throw err('from/to must be dates');
   const taskRows = db.prepare(`${SELECT} WHERE t.due_date BETWEEN ? AND ? ${mine ? "AND (t.assigned_to = ? OR t.assigned_to = '')" : ''} ORDER BY t.done, t.due_date, t.id`)
     .all(...(mine ? [from, to, mine] : [from, to]));
@@ -107,6 +107,7 @@ function calendar({ from, to, mine, today, branch }) {
   for (const o of db.prepare(`SELECT id, business, priority, branch, stage, assigned_rep, status, deadline FROM opportunities
       WHERE deadline BETWEEN ? AND ? AND status NOT IN ${require('./pipeline').CLOSED_SQL} ${repFilter}`).all(...(mine ? [from, to, mine] : [from, to]))) {
     if (branch && !require('./branch').inBranch(o, branch)) continue;
+    if (hidePending && require('./pipeline').get(o.id)?.review_status === 'pending') continue;
     events.push({ date: o.deadline, kind: 'deadline', title: `${o.business}: ${o.stage || 'deadline'}`, priority: o.priority, opportunity_id: o.id, assigned_rep: o.assigned_rep, branch: o.branch });
   }
   // Dated actions from each week's executive focus list.

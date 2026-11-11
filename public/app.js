@@ -63,6 +63,8 @@ async function boot() {
   $$('.admin-only').forEach(el => el.classList.toggle('hidden', ME.role !== 'admin'));
   // Branch managers only see their own branch, so the company-wide Executive Summary isn't in their menu.
   $$('.not-manager').forEach(el => el.classList.toggle('hidden', ME.role === 'manager'));
+  $$('.ops-only').forEach(el => el.classList.toggle('hidden', !['admin', 'operator'].includes(ME.role)));
+  if (typeof refreshReviewBadge === 'function') refreshReviewBadge();
   GET('/settings').then(st => $('#nav-marketing').classList.toggle('hidden', !st.show_marketing)).catch(() => {});
   $('#whoami').innerHTML = `${esc(ME.name)}<div>${esc(roleLabel(ME))}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
   // Branch managers start on their own branch page.
@@ -573,6 +575,7 @@ async function settingsView() {
   <div class="grid g2">
     <div class="card"><h2>General</h2>
       <div class="field"><label class="f">Your name (for the owner login: shown in the welcome greeting and on activity)</label><input data-s="owner_name" value="${esc(s.owner_name || '')}" placeholder="e.g. Brandon Lagasse"></div>
+      <div class="field"><label class="f"><input type="checkbox" data-s="review_new_leads" style="width:auto" ${s.review_new_leads !== false ? 'checked' : ''}> Send new leads from the weekly scan to the <b>To review</b> queue first (Operators/Admins approve them before branches see them)</label></div>
       <div class="field"><label class="f"><input type="checkbox" data-s="show_marketing" style="width:auto" ${s.show_marketing ? 'checked' : ''}> Show the Marketing section in the sidebar (dashboard, contacts, forms, workflows, emails, broadcasts)</label></div>
       <div class="field"><label class="f">Company name (used in email footers)</label><input data-s="company_name" value="${esc(s.company_name)}"></div>
       <div class="field"><label class="f">From address</label><input data-s="from_email" value="${esc(s.from_email)}"></div>

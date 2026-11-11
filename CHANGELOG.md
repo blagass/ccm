@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Operator review queue (To review)**: new leads from the weekly scan wait for an Operator or Admin instead of routing straight to branches. Approve (to the suggested or another branch), mark Already a customer / Not interested, or flag Needs info; approve selected or all at once. Branch managers and reps don't see leads until they're approved. Banner on the Executive Summary and branch pages, sidebar count, and a review item first in the Operator/Admin welcome. Setting to turn it off (Settings → General).
 - **Branch managers see only their branch**: leads, search, lead pages, calendar and branch page are limited to their branch (enforced by the server); the Executive Summary, focus-list editing and Excel export are company-wide and not available to them.
 - **Operator role**: sees the Executive Summary, every branch, the Pipeline and Calendar, and can move leads between branches and route unassigned leads; users and settings stay admin-only. Operators get the team-picture welcome.
 - **Already a customer / Not interested**: new buttons on lead tables and briefs (and statuses). The lead closes, drops off open lists and totals, and the weekly scan skips it from then on; changing the status back resumes tracking.

@@ -23,6 +23,7 @@ test.before(async () => {
   server = app.listen(0); await new Promise(r => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`; process.env.BASE_URL = base;
   await owner('POST', '/api/login', { password: 'owner-pass-123' });
+  await owner('PUT', '/api/settings', { review_new_leads: false }); // these tests cover direct routing
   await owner('PUT', '/api/settings', { branches: ['Springfield', 'Bend', 'Medford', 'Boise'], branch_merges: { Portland: 'Springfield' }, branch_owners: { Boise: 'John', Medford: 'Kevin' } });
   await owner('POST', '/api/pipeline/scan', { week: '2026-11-09', opportunities: [
     { business: 'Crave Kitchen & Bar', branch: 'Boise', priority: 'Hot', deadline: '2026-11-20' },

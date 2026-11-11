@@ -26,6 +26,7 @@ test.before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
   process.env.BASE_URL = base;
   await owner('POST', '/api/login', { password: 'owner-pass-123' });
+  await owner('PUT', '/api/settings', { review_new_leads: false }); // these tests cover direct routing
 });
 test.after(() => server.close());
 

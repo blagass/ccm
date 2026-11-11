@@ -43,6 +43,7 @@ async function branchView(name, q) {
       <select id="bweek" style="width:auto">${b.weeks.map(w => `<option value="${w}" ${w === b.week ? 'selected' : ''}>Week of ${fmtWeek(w)}</option>`).join('')}</select>
       <a class="btn" href="#/pipeline?branch=${encodeURIComponent(b.branch)}&open=true">Open in Pipeline</a><button class="btn" onclick="print()">Print</button></div></div>
 
+  ${b.pending_review && ['admin', 'operator'].includes(ME?.role) ? `<a class="card review-banner no-print" href="#/review?branch=${encodeURIComponent(b.branch)}"><b>📥 ${b.pending_review} ${esc(b.branch)} lead${b.pending_review === 1 ? '' : 's'} waiting for review.</b> They'll show here once approved. <span class="go">Review ›</span></a>` : ''}
   <div class="no-print branch-glance">
   <h3 class="band">${esc(b.branch)} at a glance</h3>
   <div class="grid g4">

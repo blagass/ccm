@@ -133,6 +133,7 @@ async function execSummary(q) {
     <div class="row no-print" style="flex:0 0 auto">
       <select id="week" style="width:auto">${s.weeks.map(w => `<option value="${w}" ${w === s.week ? 'selected' : ''}>Week of ${fmtWeek(w)}</option>`).join('')}</select>
       ${importButton()}<a class="btn" href="/api/pipeline/export.xlsx?week=${s.week}">Export to Excel</a><button class="btn" onclick="print()">Print</button></div></div>
+  <div id="review-banner"></div>
   <div class="card headline"><b>Headline:</b> <span id="headline" contenteditable="true" class="editable" data-ph="Click to write this week's headline…">${esc(rep.headline)}</span></div>
   <h3 class="band">This week at a glance</h3>
   <div class="grid g4">
@@ -183,6 +184,9 @@ async function execSummary(q) {
   ${rep.sources.length ? `<div class="card" style="margin-top:16px"><h2>Where these leads come from</h2><table><tr><th>Source</th><th>Reachable?</th><th>Notes</th></tr>${rep.sources.map(x => `<tr><td>${esc(x.source)}</td><td>${esc(x.reachable)}</td><td class="small">${esc(x.notes)}</td></tr>`).join('')}</table></div>` : ''}`;
 
   wireImport();
+  if (['admin', 'operator'].includes(ME?.role)) GET('/review').then(r => {
+    if (r.leads.length) $('#review-banner').innerHTML = `<a class="card review-banner no-print" href="#/review"><b>📥 ${r.leads.length} new lead${r.leads.length === 1 ? '' : 's'} waiting for review</b>${r.leads.filter(o => o.priority === 'Hot').length ? ` (${r.leads.filter(o => o.priority === 'Hot').length} Hot)` : ''}. Branches see them once they're approved. <span class="go">Review now ›</span></a>`;
+  }).catch(() => {});
   $('#week').onchange = e => location.hash = '#/?week=' + e.target.value;
   // Focus list: rows carry their prospect id; branch, deal, owner and status come from the prospect.
   const readFocus = () => $$('#focus tbody tr[data-i]').map(tr => {
@@ -273,7 +277,7 @@ async function pipelineList(q) {
     ${rows.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned branch</th><th class="gold">Status</th></tr></thead><tbody>
       ${rows.map(o => `<tr class="click pri-${o.priority}" data-href="#/pipeline/${o.id}">
         <td>${priPill(o.priority)}${!listType ? `<div class="muted small">${LIST_SHORT[o.list_type]}</div>` : ''}</td>
-        <td><b>${esc(o.business)}</b><div class="muted small">${esc(o.location)}${o.branch && !m.branches.some(b => o.branch === b) ? ` · ${esc(o.branch)}` : ''}</div></td><td class="small">${esc(o.stage)}</td>
+        <td><b>${esc(o.business)}</b>${o.review_status === 'pending' ? ' <span class="pill warn">To review</span>' : ''}<div class="muted small">${esc(o.location)}${o.branch && !m.branches.some(b => o.branch === b) ? ` · ${esc(o.branch)}` : ''}</div></td><td class="small">${esc(o.stage)}</td>
         <td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
         <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
         <td>${branchCell(o, m)}</td>
@@ -342,6 +346,7 @@ async function opportunityBrief(id) {
   <div class="card brief">
     <div class="brief-title"><div><h1>${esc(o.business)}</h1><div class="muted">${esc(o.location)} • Branch: ${esc(o.branch)} • ${esc(m.list_types[o.list_type])} • first seen week of ${fmtWeek(o.first_seen_week)}${o.last_seen_week !== o.first_seen_week ? `, last seen ${fmtWeek(o.last_seen_week)}` : ''}</div></div>
       <span class="pill ${PRI_CLASS[o.priority]}" style="font-size:15px;padding:4px 12px">${esc(o.priority.toUpperCase())} ${o.list_type === 'switch' ? 'SWITCH PROSPECT' : o.list_type === 'chain' ? 'ACCOUNT' : 'LEAD'}</span></div>
+    ${o.review_status === 'pending' ? `<div class="review-banner" style="margin-bottom:10px"><b>📥 Waiting for review.</b> Branches can't see this lead yet. ${['admin', 'operator'].includes(ME?.role) ? '<a class="btn sm primary" href="#/review">Open the review queue</a>' : ''}</div>` : ''}
     <div class="row quick">
       <label>Assigned branch<div class="qb">${branchCell(o, m)}</div></label>
       ${closeButtons(o) ? `<label>Close out${closeButtons(o)}</label>` : ''}

@@ -180,6 +180,7 @@ const DEFAULT_SETTINGS = {
   branches: ['Springfield', 'Portland', 'Bend', 'Medford', 'Boise'],
   branch_owners: {},   // { Boise: 'John', ... } new and unassigned leads go to the branch owner
   owner_name: '',
+  review_new_leads: true, // new scan leads wait in the Operator review queue until approved (no automatic routing)
   show_marketing: false, // sidebar Marketing section (forms, contacts, emails…) hidden until it's in use
   branch_merges: {},    // { Portland: 'Springfield' } leads keep their location but count toward the target branch      // display name for the built-in owner login (ADMIN_PASSWORD)
   reps: [],

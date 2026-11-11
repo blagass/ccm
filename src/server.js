@@ -382,7 +382,9 @@ api.delete('/workflows/:id', (req, res) => { db.prepare('DELETE FROM workflows W
 // Branch managers only see their own branch's leads; everyone else sees the whole pipeline.
 const managerOf = u => (u && u.role === 'manager' && u.branch) ? u.branch : null;
 const canSee = (u, o) => !managerOf(u) || (o && branchPage.inBranch(o, managerOf(u)));
-const visibleOpp = (req, id) => { const o = pipeline.get(Number(id)); return o && canSee(req.user, o) ? o : null; };
+const isOps = u => u && (u.role === 'admin' || u.role === 'operator');
+// Leads waiting for review are only visible to admins and operators.
+const visibleOpp = (req, id) => { const o = pipeline.get(Number(id)); return o && canSee(req.user, o) && (o.review_status !== 'pending' || isOps(req.user)) ? o : null; };
 function notForManagers(req, res, next) {
   if (managerOf(req.user)) return res.status(403).json({ error: 'Branch managers see their branch page instead' });
   next();
@@ -401,6 +403,21 @@ api.get('/branches/:branch', (req, res) => {
   res.json(branchPage.branchSummary(b, { week: req.query.week, today: req.query.today }));
 });
 api.put('/pipeline/reports/:week', notForManagers, (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
+// ---------- Review queue (Operators & Admins) ----------
+api.get('/review', requireOps, (req, res) => res.json({ leads: pipeline.reviewQueue(), auto_routing: getSettings().review_new_leads === false }));
+api.post('/review/approve', requireOps, (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  const done = [];
+  for (const it of items) { const o = pipeline.approve(Number(it.id), it.branch || null, req.user.name); if (o) done.push(o); }
+  res.json({ approved: done.length, leads: done });
+});
+api.post('/opportunities/:id/review-note', requireOps, (req, res) => {
+  const note = String(req.body?.note || '').trim();
+  if (!note) return res.status(400).json({ error: 'Add a short note' });
+  const o = pipeline.reviewNote(Number(req.params.id), note, req.user.name);
+  o ? res.json(o) : res.status(404).json({ error: 'Not found' });
+});
+api.post('/review/reset-open', requireAdmin, (req, res) => res.json({ moved: pipeline.resetOpenToReview(req.user.name) }));
 api.post('/pipeline/assign-by-branch', requireOps, (req, res) => res.json({ assigned: pipeline.assignByBranch(req.user.name) }));
 api.post('/pipeline/reports/:week/focus', notForManagers, (req, res) => {
   const o = pipeline.get(Number(req.body.opportunity_id));
@@ -414,6 +431,7 @@ api.post('/pipeline/reports/:week/focus', notForManagers, (req, res) => {
 api.get('/opportunities', (req, res) => {
   const q = { ...req.query };
   if (managerOf(req.user)) q.branch = managerOf(req.user);
+  if (!isOps(req.user)) q.review = 'hide';
   res.json(pipeline.list(q));
 });
 api.post('/opportunities', (req, res) => {
@@ -510,7 +528,7 @@ api.get('/welcome', (req, res) => {
 });
 
 // ---------- Calendar & tasks ----------
-api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null, branch: managerOf(req.user) })));
+api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null, branch: managerOf(req.user), hidePending: !isOps(req.user) })));
 api.post('/tasks', (req, res) => {
   if (req.body?.opportunity_id && !visibleOpp(req, req.body.opportunity_id)) return res.status(404).json({ error: 'Lead not found' });
   res.status(201).json(tasks.create(req.body || {}, req.user.name));

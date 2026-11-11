@@ -113,6 +113,11 @@ function briefing(user, { today, hour }) {
   const topFocus = sum?.report.focus?.[0] || sum?.suggested_focus?.[0];
 
   if (isAdmin) {
+    const waiting = pipeline.reviewQueue();
+    if (waiting.length) {
+      const hot = waiting.filter(o => o.priority === 'Hot').length;
+      add({ icon: '📥', text: `Review ${plural(waiting.length, 'new lead')}${hot ? ` (${hot} Hot)` : ''} waiting for you. Approving sends each one to its branch.`, href: '#/review' });
+    }
     overdueWin();
     if (unassignedHot) add({ icon: '👥', text: `Route ${plural(unassignedHot, 'Hot lead')} that ${unassignedHot === 1 ? "doesn't" : "don't"} have an owner yet, so reps can get moving.`, href: '#/pipeline?priority=Hot&rep=__none&open=true' });
     if (soon[0]) deadlineWin(soon[0]);

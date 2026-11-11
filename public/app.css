@@ -244,3 +244,13 @@ select.branch-move{min-width:130px;font-weight:700;color:var(--navy)}
 .close-btns .btn.sm{padding:2px 7px;font-size:11px;font-weight:600;color:#475467;background:#fff}
 .close-btns .btn.sm:hover{border-color:var(--brand);color:var(--navy)}
 .quick .close-btns{margin-top:0}
+
+/* ---------- Review queue ---------- */
+.nav-badge{background:var(--orange);color:#fff;border-radius:999px;padding:0 7px;font-size:11px;margin-left:6px;font-weight:700}
+.review-banner{display:block;background:#fff8ec;border:1px solid #f5d29a;color:#7a4b00;padding:12px 16px;border-radius:10px;margin-bottom:14px}
+.review-banner .go{float:right;color:var(--brand);font-weight:700}
+a.review-banner:hover{border-color:var(--orange)}
+table.review td{vertical-align:top}
+table.review .rwhat{color:#475467;margin-top:4px;max-width:520px}
+table.review .ract{white-space:nowrap}table.review .ract .btn{margin:0 2px 4px 0}
+table.review select.rbranch{min-width:130px;font-weight:700;color:var(--navy)}
