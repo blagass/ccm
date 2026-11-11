@@ -43,12 +43,14 @@ async function branchView(name, q) {
       <select id="bweek" style="width:auto">${b.weeks.map(w => `<option value="${w}" ${w === b.week ? 'selected' : ''}>Week of ${fmtWeek(w)}</option>`).join('')}</select>
       <a class="btn" href="#/pipeline?branch=${encodeURIComponent(b.branch)}&open=true">Open in Pipeline</a><button class="btn" onclick="print()">Print</button></div></div>
 
+  <div class="no-print branch-glance">
   <h3 class="band">${esc(b.branch)} at a glance</h3>
   <div class="grid g4">
     ${[['Open leads', t.open, link('tab', 'open')], ['Hot', t.hot, link('tab', 'hot'), t.hot ? 'hot' : ''], ['New this week', t.new_this_week, link('tab', 'new')], ['Est. pipeline (open)', `${money$(t.pipeline_low)}–${money$(t.pipeline_high)}`]].map(tile).join('')}
     ${[['Hot with no rep', t.hot_unassigned, `#/pipeline?branch=${encodeURIComponent(b.branch)}&priority=Hot&rep=__none&open=true`, t.hot_unassigned ? 'hot' : ''], ["Still at 'New'", t.still_new, `#/pipeline?branch=${encodeURIComponent(b.branch)}&status=New&open=true`], ['Deadlines, next 14 days', t.deadlines_14d], ['Won / lost', `${t.won} / ${t.lost}`, link('tab', 'closed')]].map(tile).join('')}
   </div>
   <p class="muted small">Pipeline adds up rough deal-size ranges on open leads in this branch (chain accounts excluded). Shared rows such as "Boise / Bend" count on both branch pages.${b.company_wide_open ? ` ${b.company_wide_open} company-wide accounts ("All branches") are on the <a href="#/pipeline?open=true">Pipeline</a>.` : ''}</p>
+  </div>
 
   <div class="grid g2" style="margin-top:8px">
     <div class="card"><h2>${b.focus.length ? `This week's focus for ${esc(b.branch)}` : `Suggested focus for ${esc(b.branch)}`}</h2>
@@ -70,7 +72,7 @@ async function branchView(name, q) {
   </div>
 
   <h3 class="band">${esc(b.branch)} leads</h3>
-  <div class="card">
+  <div class="card print-flow">
     <div class="tabs no-print" style="margin-top:-6px">${Object.entries(tabs).map(([k, [label, fn]]) => `<a href="${link('tab', k)}" data-btab="${k}" class="${k === tab ? 'active' : ''}">${label} (${b.leads.filter(fn).length})</a>`).join('')}</div>
     <div id="branch-leads">${leadsTable(leads)}</div>
   </div>

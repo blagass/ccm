@@ -229,3 +229,10 @@ ul.upcoming .when{min-width:96px;font-weight:700;color:var(--navy);font-size:13p
 .branch-tabs a:hover:not(.on){background:#c67e00;border-color:#c67e00;color:var(--navy)}
 .branch-tabs a.on{background:var(--navy);border-color:#dc8c00;color:#fff;box-shadow:0 0 0 2px #dc8c00}
 .branch-tabs a .mine{color:var(--navy)}.branch-tabs a.on .mine{color:#dc8c00}
+@media print{
+  .card.print-flow{break-inside:auto}
+  .print-flow tr{break-inside:avoid}
+  h3.band{break-after:avoid}
+  .branch-tabs{display:none}
+  input.inline,select.inline{border:0;background:none;padding:0;min-width:0;appearance:none;-webkit-appearance:none;font-size:12px}
+}
