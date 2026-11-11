@@ -214,8 +214,8 @@ async function pipelineList(q) {
   const link = (k, v) => { const p = new URLSearchParams(q); v ? p.set(k, v) : p.delete(k); return '#/pipeline?' + p; };
   const repList = `<datalist id="reps">${m.reps.map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
   view.innerHTML = `${repList}
-  <div class="head"><h1>Pipeline</h1><div class="row" style="flex:0 0 auto">${importButton()}
-    <a class="btn" href="/api/pipeline/export.xlsx?${q.get('week') ? 'week=' + q.get('week') : 'scope=open'}">Export to Excel</a><a class="btn primary" href="#/pipeline/new">+ Add lead</a></div></div>
+  <div class="head"><h1>Pipeline</h1><div class="row" style="flex:0 0 auto">
+    <a class="btn" href="/api/pipeline/export.xlsx?${q.get('week') ? 'week=' + q.get('week') : 'scope=open'}">Export to Excel</a></div></div>
   <div class="tabs">${[['', 'All'], ['lead', "This Week's Leads"], ['switch', 'Switch Prospects'], ['chain', 'Chain & Franchisee']].map(([k, l]) => `<a href="${link('list', k)}" class="${listType === k ? 'active' : ''}">${l}</a>`).join('')}</div>
   <div class="card">
     <form class="row" id="pf" style="margin-bottom:12px">
