@@ -97,9 +97,13 @@ function branchSummary(name, { week, today } = {}) {
 }
 
 // Which branches a person owns (for "My branch" links).
-function branchesOwnedBy(name) {
+function branchesOwnedBy(name, managerOf) {
   const owners = getSettings().branch_owners || {};
-  return Object.entries(owners).filter(([, n]) => n && name && n.toLowerCase() === String(name).toLowerCase()).map(([b]) => b);
+  const out = Object.entries(owners).filter(([, n]) => n && name && n.toLowerCase() === String(name).toLowerCase()).map(([b]) => b)
+    .filter(b => (getSettings().branches || []).includes(b));
+  if (managerOf && !out.includes(managerOf)) out.unshift(managerOf);
+  else if (managerOf) { out.splice(out.indexOf(managerOf), 1); out.unshift(managerOf); }
+  return out;
 }
 
 module.exports = { branchSummary, branchesOwnedBy, resolveBranch };

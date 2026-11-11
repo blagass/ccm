@@ -95,13 +95,14 @@ app.get('/api/me', (req, res) => {
 app.get('/api/invites/:token', (req, res) => {
   const { invite, error } = users.findInvite(req.params.token);
   if (error) return res.status(410).json({ error });
-  res.json({ email: invite.email, role: invite.role, kind: invite.kind, company: getSettings().company_name });
+  res.json({ email: invite.email, role: invite.role, branch: invite.branch, kind: invite.kind, company: getSettings().company_name });
 });
 app.post('/api/invites/:token/accept', (req, res) => {
   if (tooManyFailures(req.ip)) return res.status(429).json({ error: 'Too many attempts. Try again later.' });
   try {
     const user = users.acceptInvite(req.params.token, req.body || {});
     pipeline.claimPlaceholderName(user.name);
+    if (user.role === 'manager' && user.branch) pipeline.setBranchOwner(user.branch, user.name);
     setSession(req, res, user.id);
     res.json({ ok: true, user });
   } catch (e) { if (e.status === 410) recordFailure(req.ip); throw e; }
@@ -382,7 +383,7 @@ api.get('/pipeline/meta', (req, res) => res.json({
   list_types: pipeline.LIST_TYPES, priorities: pipeline.PRIORITIES, statuses: pipeline.STATUSES, columns: pipeline.COLUMNS,
   branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...users.names(), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
   weeks: pipeline.weeks(), current_week: pipeline.mondayOf(),
-  branch_owners: getSettings().branch_owners || {}, my_branches: branchPage.branchesOwnedBy(req.user.name),
+  branch_owners: getSettings().branch_owners || {}, my_branches: branchPage.branchesOwnedBy(req.user.name, req.user.role === 'manager' ? req.user.branch : null),
 }));
 api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
 api.get('/branches/:branch', (req, res) => res.json(branchPage.branchSummary(req.params.branch, { week: req.query.week, today: req.query.today })));
@@ -483,7 +484,7 @@ function inviteLink(token) { return `${mailer.BASE_URL()}/#/accept/${token}`; }
 async function emailLink(inv, link, byName) {
   if (!process.env.SMTP_HOST) return false;
   const company = mailer.escapeHtml(getSettings().company_name);
-  const what = inv.kind === 'reset' ? 'reset your My Curtis password' : `join ${company} on My Curtis`;
+  const what = inv.kind === 'reset' ? 'reset your My Curtis password' : `join ${company} on My Curtis${inv.role === 'manager' && inv.branch ? ` as the ${mailer.escapeHtml(inv.branch)} branch manager` : ''}`;
   await mailer.sendInternal(inv.email, inv.kind === 'reset' ? 'Reset your My Curtis password' : `${byName} invited you to My Curtis`,
     `<p>Hi,</p><p>${mailer.escapeHtml(byName)} has invited you to ${what}.</p><p><a href="${link}">${inv.kind === 'reset' ? 'Choose a new password' : 'Accept the invite'}</a></p><p style="color:#888;font-size:12px">This link expires in ${users.INVITE_DAYS} days and can be used once.</p>`);
   return true;
@@ -493,7 +494,7 @@ api.post('/users/invite', requireAdmin, wrap(async (req, res) => {
   const link = inviteLink(inv.token);
   let emailed = false, email_error = null;
   try { emailed = await emailLink(inv, link, req.user.name); } catch (e) { email_error = e.message; }
-  res.status(201).json({ link, email: inv.email, role: inv.role, expires_at: inv.expires_at, emailed, email_error });
+  res.status(201).json({ link, email: inv.email, role: inv.role, branch: inv.branch, expires_at: inv.expires_at, emailed, email_error });
 }));
 api.post('/users/:id/reset', requireAdmin, wrap(async (req, res) => {
   const inv = users.createReset(Number(req.params.id), req.user.name);
@@ -508,6 +509,7 @@ api.patch('/users/:id', requireAdmin, (req, res) => {
   if (id === req.user.id && (req.body.role === 'rep' || req.body.disabled)) return res.status(400).json({ error: "You can't demote or disable your own account" });
   const u = users.update(id, req.body || {});
   if (u && req.body?.name) pipeline.claimPlaceholderName(u.name);
+  if (u && u.role === 'manager' && u.branch && (req.body?.role || req.body?.branch)) pipeline.setBranchOwner(u.branch, u.name);
   u ? res.json(u) : res.status(404).json({ error: 'Not found' });
 });
 api.delete('/users/:id', requireAdmin, (req, res) => {

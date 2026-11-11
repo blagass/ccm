@@ -90,6 +90,24 @@ function autoAssign(id, actor) {
   log(id, 'assign', `Assigned to ${owner} (${primaryBranch(o.branch)} branch owner)`, actor && !/^scan |^manual$/.test(actor) ? actor : null);
   return true;
 }
+// Make someone the owner of a branch (used when a Branch Manager joins or is assigned). Leads that were
+// sitting with the previous owner's placeholder or nobody move to the new manager.
+function setBranchOwner(branch, name) {
+  const owners = { ...(getSettings().branch_owners || {}) };
+  const prev = owners[branch];
+  owners[branch] = name;
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('branch_owners', JSON.stringify(owners));
+  // A first-name placeholder for this branch ("Kevin") hands its leads over to the manager.
+  if (prev && prev !== name && !prev.includes(' ')) {
+    const rows = db.prepare("SELECT id, branch FROM opportunities WHERE assigned_rep = ?").all(prev);
+    for (const r of rows) if (primaryBranch(r.branch) === branch) {
+      db.prepare("UPDATE opportunities SET assigned_rep = ? WHERE id = ?").run(name, r.id);
+      log(r.id, 'assign', `Assigned to ${name} (${branch} branch manager)`);
+    }
+  }
+  assignByBranch(name);
+}
+
 // Apply branch owners to every open lead that has nobody yet. Returns counts per owner.
 function assignByBranch(actor) {
   const out = {};
@@ -381,5 +399,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 
 module.exports = {
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, setBranchOwner, personas, upsertPersona, personasFor, activity, log,
 };

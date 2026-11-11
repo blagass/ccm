@@ -28,7 +28,18 @@ CREATE TABLE IF NOT EXISTS invites (
 );
 `);
 
-const ROLES = ['admin', 'rep'];
+// admin: everything · manager: runs one branch (branch column) · rep: works leads
+const ROLES = ['admin', 'manager', 'rep'];
+try { db.exec('ALTER TABLE users ADD COLUMN branch TEXT'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE invites ADD COLUMN branch TEXT'); } catch { /* exists */ }
+const { getSettings } = require('./db');
+function checkRole(role, branch) {
+  if (!ROLES.includes(role)) throw err('Role must be admin, manager or rep');
+  if (role !== 'manager') return null;
+  const b = (getSettings().branches || []).find(x => x.toLowerCase() === String(branch || '').toLowerCase());
+  if (!b) throw err('Pick which branch this manager runs');
+  return b;
+}
 const INVITE_DAYS = 7;
 const err = (msg, status = 400) => Object.assign(new Error(msg), { status });
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
@@ -50,7 +61,7 @@ function validatePassword(pw) {
   if (typeof pw !== 'string' || pw.length < 10) throw err('Password must be at least 10 characters');
 }
 
-const PUBLIC_COLS = 'id, email, name, role, disabled, last_login_at, created_at';
+const PUBLIC_COLS = 'id, email, name, role, branch, disabled, last_login_at, created_at';
 function get(id) { return db.prepare(`SELECT ${PUBLIC_COLS} FROM users WHERE id = ?`).get(id); }
 function list() { return db.prepare(`SELECT ${PUBLIC_COLS} FROM users ORDER BY disabled, name`).all(); }
 function names() { return db.prepare('SELECT name FROM users WHERE disabled = 0 ORDER BY name').all().map(r => r.name); }
@@ -64,14 +75,14 @@ function authenticate(email, password) {
   return get(u.id);
 }
 
-function createInvite({ email, role = 'rep' }, by = '') {
+function createInvite({ email, role = 'rep', branch }, by = '') {
   email = String(email || '').trim().toLowerCase();
   if (!isEmail(email)) throw err('Enter a valid email address');
-  if (!ROLES.includes(role)) throw err('Role must be admin or rep');
+  branch = checkRole(role, branch);
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) throw err('That person already has an account. Use "Reset password" instead.', 409);
   // One live invite per email: replace any older pending one.
   db.prepare("DELETE FROM invites WHERE email = ? AND kind = 'invite' AND used_at IS NULL").run(email);
-  return issue({ kind: 'invite', email, role, by });
+  return issue({ kind: 'invite', email, role, branch, by });
 }
 function createReset(userId, by = '') {
   const u = get(userId);
@@ -79,12 +90,12 @@ function createReset(userId, by = '') {
   db.prepare("DELETE FROM invites WHERE user_id = ? AND kind = 'reset' AND used_at IS NULL").run(u.id);
   return issue({ kind: 'reset', email: u.email, role: u.role, userId: u.id, by });
 }
-function issue({ kind, email, role, userId = null, by }) {
+function issue({ kind, email, role, branch = null, userId = null, by }) {
   const token = crypto.randomBytes(24).toString('base64url');
   const expires = new Date(Date.now() + INVITE_DAYS * 864e5).toISOString().replace('T', ' ').slice(0, 19);
-  db.prepare('INSERT INTO invites (token_hash, kind, email, role, user_id, invited_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(sha(token), kind, email, role, userId, by, expires);
-  return { token, email, role, kind, expires_at: expires };
+  db.prepare('INSERT INTO invites (token_hash, kind, email, role, branch, user_id, invited_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(sha(token), kind, email, role, branch, userId, by, expires);
+  return { token, email, role, branch, kind, expires_at: expires };
 }
 
 function findInvite(token) {
@@ -107,8 +118,8 @@ function acceptInvite(token, { name, password }) {
     name = String(name || '').trim();
     if (!name) throw err('Enter your name');
     if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(invite.email)) throw err('An account already exists for this email', 409);
-    userId = Number(db.prepare('INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
-      .run(invite.email, name, invite.role, hashPassword(password)).lastInsertRowid);
+    userId = Number(db.prepare('INSERT INTO users (email, name, role, branch, password_hash) VALUES (?, ?, ?, ?, ?)')
+      .run(invite.email, name, invite.role, invite.role === 'manager' ? invite.branch : null, hashPassword(password)).lastInsertRowid);
   }
   db.prepare("UPDATE invites SET used_at = datetime('now') WHERE id = ?").run(invite.id);
   db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(userId);
@@ -116,18 +127,22 @@ function acceptInvite(token, { name, password }) {
 }
 
 function pendingInvites() {
-  return db.prepare(`SELECT id, kind, email, role, invited_by, expires_at, created_at FROM invites
+  return db.prepare(`SELECT id, kind, email, role, branch, invited_by, expires_at, created_at FROM invites
     WHERE used_at IS NULL AND expires_at > datetime('now') ORDER BY id DESC`).all();
 }
 function revokeInvite(id) { db.prepare('DELETE FROM invites WHERE id = ? AND used_at IS NULL').run(id); }
 
-function update(id, { name, role, disabled }) {
+function update(id, { name, role, branch, disabled }) {
   const u = get(id);
   if (!u) return null;
-  if (role !== undefined && !ROLES.includes(role)) throw err('Role must be admin or rep');
+  let newBranch = u.branch;
+  if (role !== undefined || branch !== undefined) {
+    const r = role ?? u.role;
+    newBranch = checkRole(r, branch ?? u.branch);
+  }
   if (name !== undefined && !String(name).trim()) throw err('Name cannot be empty');
-  db.prepare('UPDATE users SET name = COALESCE(?, name), role = COALESCE(?, role), disabled = COALESCE(?, disabled) WHERE id = ?')
-    .run(name === undefined ? null : String(name).trim(), role ?? null, disabled === undefined ? null : (disabled ? 1 : 0), id);
+  db.prepare('UPDATE users SET name = COALESCE(?, name), role = COALESCE(?, role), branch = ?, disabled = COALESCE(?, disabled) WHERE id = ?')
+    .run(name === undefined ? null : String(name).trim(), role ?? null, newBranch, disabled === undefined ? null : (disabled ? 1 : 0), id);
   return get(id);
 }
 function remove(id) { db.prepare('DELETE FROM users WHERE id = ?').run(id); }

@@ -20,7 +20,62 @@ function firstName(name) {
   return w.charAt(0).toUpperCase() + w.slice(1);
 }
 
+// Branch managers get their branch's picture (e.g. Kevin → Medford).
+function managerBriefing(user, { today, hour }) {
+  const { branchSummary } = require('./branch');
+  const b = branchSummary(user.branch, { today });
+  const first = firstName(user.name);
+  const seed = [...String(today)].reduce((a, c) => a + c.charCodeAt(0), 0) + (user.id || 0);
+  const t = b.tiles, br = b.branch;
+  const mineOverdue = db.prepare("SELECT * FROM tasks WHERE done = 0 AND due_date < ? AND assigned_to = ? ORDER BY due_date").all(today, user.name);
+  const teamOverdue = b.overdue.filter(x => x.assigned_to !== user.name).length;
+  const hotNew = b.leads.filter(o => o.priority === 'Hot' && o.status === 'New');
+  const soon = b.upcoming.filter(u => u.kind === 'deadline' && u.date <= addDays(today, 7));
+  const page = `#/branch/${encodeURIComponent(br)}`;
+
+  const wins = [];
+  const used = new Set();
+  const add = w => { if (wins.length < 3 && !(w.opportunity_id && used.has(w.opportunity_id))) { wins.push(w); if (w.opportunity_id) used.add(w.opportunity_id); } };
+  if (mineOverdue.length) add({ icon: '✔', text: mineOverdue.length === 1 ? `Clear one carried-over task: “${mineOverdue[0].title}”` : `Clear ${mineOverdue.length} carried-over tasks, starting with “${mineOverdue[0].title}”`, href: `#/calendar?d=${today}`, opportunity_id: mineOverdue.length === 1 ? mineOverdue[0].opportunity_id : null });
+  if (t.hot_unassigned) add({ icon: '👥', text: `Hand out ${plural(t.hot_unassigned, `Hot ${br} lead`)} that ${t.hot_unassigned === 1 ? "doesn't" : "don't"} have a rep yet.`, href: `#/pipeline?branch=${encodeURIComponent(br)}&priority=Hot&rep=__none&open=true` });
+  if (soon[0]) {
+    const o = soon[0], days = Math.round((new Date(o.date) - new Date(today)) / 864e5);
+    const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `on ${dayName(o.date)}`;
+    add({ icon: '⏰', text: `${shortName(o.title.split(':')[0])} has a deadline ${when} (${shortDate(o.date)}). ${o.assigned_rep && o.assigned_rep !== user.name ? `${o.assigned_rep.split(' ')[0]} has it, so a quick check-in helps.` : 'It’s on your plate.'}`, href: `#/pipeline/${o.opportunity_id}`, opportunity_id: o.opportunity_id });
+  }
+  if (t.new_this_week) add({ icon: '📬', text: `This week's scan brought ${plural(t.new_this_week, `new ${br} lead`)}. A quick look keeps your team on the best ones.`, href: `${page}?tab=new` });
+  if (hotNew.length) add({ icon: '🔥', text: `${plural(hotNew.length, `Hot ${br} lead`)} ${hotNew.length === 1 ? 'is' : 'are'} still at “New”${hotNew.length === 1 ? `: ${shortName(hotNew[0].business)}` : ''}. A first hello gets ${hotNew.length === 1 ? 'it' : 'them'} moving.`, href: hotNew.length === 1 ? `#/pipeline/${hotNew[0].id}` : `#/pipeline?branch=${encodeURIComponent(br)}&priority=Hot&status=New&open=true`, opportunity_id: hotNew.length === 1 ? hotNew[0].id : null });
+  if (teamOverdue) add({ icon: '🗓', text: `Your ${br} team has ${plural(teamOverdue, 'carried-over task')}. Worth a quick look.`, href: page });
+  const top = (b.focus[0] || b.suggested_focus[0]);
+  if (top) {
+    // A shared item ("Fitti's, Quack Shack, Jay's on 4th: walk in") names only this branch's leads.
+    const label = top.opps && top.opps.length
+      ? `${top.opps.map(o => shortName(o.business)).join(', ')}: ${(top.action.includes(':') ? top.action.slice(top.action.indexOf(':') + 1) : top.action).trim()}`
+      : (top.label || top.action);
+    const id = top.opportunity_id || (top.opps && top.opps.length === 1 ? top.opps[0].id : null);
+    add({ icon: '★', text: `${br}'s #1 focus: ${label}`, href: id ? `#/pipeline/${id}` : page, opportunity_id: id });
+  }
+  if (!wins.length) add({ icon: '☕', text: `${br} is all caught up. A great moment to check in with a customer you haven't talked to lately.`, href: page });
+
+  const busy = t.hot >= 5 || t.new_this_week >= 10 || mineOverdue.length + teamOverdue >= 4;
+  const greeting = `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}${first ? ', ' + first : ''}!`;
+  const snapshot = `${br} has ${plural(t.open, 'open lead')}${t.hot ? `, ${t.hot} Hot` : ''}${t.new_this_week ? `, and ${t.new_this_week} new this week` : ''}.`;
+  const intro = `${snapshot} ${busy
+    ? pick(["It's a busy stretch, so let's start with the moves that keep your team rolling.", 'Plenty going on. Here are a few quick wins to point everyone in the right direction.'], seed)
+    : pick(["A steady week. Here's where a little steering goes a long way.", 'A good, manageable week for the branch. These are the best places to start.'], seed)}`;
+  const month = Number(today.slice(5, 7));
+  const tip = month >= 10
+    ? `Tip: ask your team to mention the year-end equipment tax deadline (in service by Dec 31) on every open ${br} quote.`
+    : pick(['Tip: a two-minute Monday huddle on the Hot list keeps everyone on the same page.', 'Tip: a quick note after each call keeps the whole branch in the loop.'], seed);
+  const closing = pick([`Thanks for leading the ${br} team.`, `${br} is in good hands. Have a great day!`], seed);
+  return {
+    greeting, intro, wins, tip, closing, role: 'manager', branch: br,
+    stats: { open: t.open, hot: t.hot, new_this_week: t.new_this_week, hot_unassigned: t.hot_unassigned, overdue: mineOverdue.length, team_overdue: teamOverdue, deadlines_7d: soon.length },
+  };
+}
+
 function briefing(user, { today, hour }) {
+  if (user.role === 'manager' && user.branch) return managerBriefing(user, { today, hour });
   const first = firstName(user.name);
   const me = first ? user.name : null;              // whose tasks/leads are "mine"
   const isAdmin = user.role === 'admin';

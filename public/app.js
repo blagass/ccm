@@ -44,6 +44,7 @@ function bind(root, state, onChange) {
 
 // ---------- Auth ----------
 let ME = null;
+const roleLabel = u => u.role === 'admin' ? 'Admin' : u.role === 'manager' ? `Branch Manager · ${u.branch || '?'}` : 'Rep';
 function showLogin() { $('#shell').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#login').classList.remove('hidden'); }
 $('#login-form').addEventListener('submit', async e => {
   e.preventDefault();
@@ -61,7 +62,9 @@ async function boot() {
   $('#login').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#shell').classList.remove('hidden');
   $$('.admin-only').forEach(el => el.classList.toggle('hidden', ME.role !== 'admin'));
   GET('/settings').then(st => $('#nav-marketing').classList.toggle('hidden', !st.show_marketing)).catch(() => {});
-  $('#whoami').innerHTML = `${esc(ME.name)}<div>${ME.role === 'admin' ? 'Admin' : 'Rep'}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
+  $('#whoami').innerHTML = `${esc(ME.name)}<div>${esc(roleLabel(ME))}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
+  // Branch managers start on their own branch page.
+  if (ME.role === 'manager' && ME.branch && (!location.hash || location.hash === '#/' || location.hash === '#')) history.replaceState(null, '', '#/branch/' + encodeURIComponent(ME.branch));
   $('#whoami').title = "Show today's welcome";
   $('#whoami').onclick = () => showWelcome(true);
   showWelcome(false);
@@ -607,7 +610,7 @@ async function acceptInvite(token) {
   const reset = inv.kind === 'reset';
   box.innerHTML = `<form class="card" id="accept-form" style="width:380px;display:grid;gap:12px">
     <img src="/img/logo.svg" alt="Curtis" class="logo"><h1 style="margin:0;font-size:24px">${reset ? 'Choose a new password' : `Join ${esc(inv.company)}`}</h1>
-    <p class="muted" style="margin:0">${reset ? 'For' : 'You were invited as'} <b>${esc(inv.email)}</b>${reset ? '' : ` (${inv.role === 'admin' ? 'Admin' : 'Rep'})`}.</p>
+    <p class="muted" style="margin:0">${reset ? 'For' : 'You were invited as'} <b>${esc(inv.email)}</b>${reset ? '' : ` (${esc(roleLabel(inv))})`}.</p>
     ${reset ? '' : '<input name="name" placeholder="Your name (shown on leads you work)" required autofocus>'}
     <input type="password" name="password" placeholder="Password (10+ characters)" minlength="10" required autocomplete="new-password">
     <input type="password" name="confirm" placeholder="Repeat password" required autocomplete="new-password">
@@ -625,27 +628,32 @@ async function acceptInvite(token) {
 
 // ---------- Users (admins) ----------
 async function usersView() {
-  const d = await GET('/users');
-  const roleSel = (id, role) => `<select data-role="${id}" style="width:auto">${opts(['rep', 'admin'], role, { rep: 'Rep', admin: 'Admin' })}</select>`;
+  const [d, pm] = await Promise.all([GET('/users'), GET('/pipeline/meta')]);
+  const roleOpts = [['rep', 'Rep'], ...pm.branches.map(b => [`manager:${b}`, `Branch Manager – ${b}`]), ['admin', 'Admin']];
+  const roleVal = u => u.role === 'manager' ? `manager:${u.branch}` : u.role;
+  const roleOptions = sel => roleOpts.map(([v, l]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const roleSel = (id, u) => `<select data-role="${id}" style="width:auto">${roleOptions(roleVal(u))}</select>`;
+  const splitRole = v => v.startsWith('manager:') ? { role: 'manager', branch: v.slice(8) } : { role: v };
   view.innerHTML = `<div class="head"><div><h1>Users</h1><div class="muted">Admins manage users and settings. Reps can do everything else.</div></div></div>
   <div class="grid g-side">
     <div class="card" style="align-self:start"><h2>Invite someone</h2>
       <form id="inv" style="display:grid;gap:10px">
         <input name="email" type="email" placeholder="name@curtisresteq.com" required>
-        <select name="role">${opts(['rep', 'admin'], 'rep', { rep: 'Rep', admin: 'Admin' })}</select>
+        <select name="role">${roleOptions('rep')}</select>
         <button class="btn primary">Create invite link</button>
       </form>
       <div id="inv-result"></div>
-      <p class="muted small">Links work once and expire after ${d.invite_days} days. ${'If email is set up, the invite is also emailed.'}</p>
+      <p class="muted small">Links work once and expire after ${d.invite_days} days. If email is set up, the invite is also emailed.</p>
+      <p class="muted small"><b>Branch Managers</b> become their branch's owner (new leads there route to them), land on their branch page when they sign in, and get a branch version of the daily welcome. Admins manage users and settings; reps and managers work leads.</p>
     </div>
     <div class="grid" style="align-content:start">
       <div class="card"><h2>Team</h2>${d.users.length ? `<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr>
         ${d.users.map(u => `<tr${u.disabled ? ' style="opacity:.5"' : ''}><td><b>${esc(u.name)}</b>${u.disabled ? ' <span class="pill bad">disabled</span>' : ''}${u.id === ME.id ? ' <span class="pill">you</span>' : ''}</td><td>${esc(u.email)}</td>
-          <td>${roleSel(u.id, u.role)}</td><td class="muted small">${u.last_login_at ? fmt(u.last_login_at) : 'never'}</td>
+          <td>${roleSel(u.id, u)}</td><td class="muted small">${u.last_login_at ? fmt(u.last_login_at) : 'never'}</td>
           <td style="white-space:nowrap"><button class="btn sm" data-reset="${u.id}">Reset password</button> <button class="btn sm" data-toggle="${u.id}" data-disabled="${u.disabled}">${u.disabled ? 'Enable' : 'Disable'}</button> <button class="btn sm danger" data-del="${u.id}" data-name="${esc(u.name)}">Remove</button></td></tr>`).join('')}</table>`
         : '<div class="empty">No team members yet. Invite your reps on the left.</div>'}</div>
       <div class="card"><h2>Pending invites</h2>${d.invites.length ? `<table><tr><th>Email</th><th>Type</th><th>Role</th><th>Invited by</th><th>Expires</th><th></th></tr>
-        ${d.invites.map(i => `<tr><td>${esc(i.email)}</td><td>${i.kind === 'reset' ? 'Password reset' : 'Invite'}</td><td>${esc(i.role)}</td><td>${esc(i.invited_by)}</td><td class="muted small">${fmt(i.expires_at)}</td><td><button class="btn sm danger" data-revoke="${i.id}">Revoke</button></td></tr>`).join('')}</table>`
+        ${d.invites.map(i => `<tr><td>${esc(i.email)}</td><td>${i.kind === 'reset' ? 'Password reset' : 'Invite'}</td><td>${esc(roleLabel(i))}</td><td>${esc(i.invited_by)}</td><td class="muted small">${fmt(i.expires_at)}</td><td><button class="btn sm danger" data-revoke="${i.id}">Revoke</button></td></tr>`).join('')}</table>`
         : '<div class="muted">None.</div>'}</div>
     </div>
   </div>`;
@@ -657,12 +665,12 @@ async function usersView() {
   };
   $('#inv').onsubmit = async e => {
     e.preventDefault();
-    try { const r = await POST('/users/invite', { email: e.target.email.value, role: e.target.role.value }); await usersView(); showLink(r, 'Invite created'); }
+    try { const r = await POST('/users/invite', { email: e.target.email.value, ...splitRole(e.target.role.value) }); await usersView(); showLink(r, `Invite created (${roleLabel(r)})`); }
     catch (err) { toast(err.message, true); }
   };
   $$('[data-reset]').forEach(b => b.onclick = async () => { try { const r = await POST(`/users/${b.dataset.reset}/reset`); await usersView(); showLink(r, 'Password reset link'); } catch (err) { toast(err.message, true); } });
   $$('[data-toggle]').forEach(b => b.onclick = async () => { try { await PATCH('/users/' + b.dataset.toggle, { disabled: b.dataset.disabled !== '1' }); usersView(); } catch (err) { toast(err.message, true); } });
-  $$('[data-role]').forEach(sel => sel.onchange = async () => { try { await PATCH('/users/' + sel.dataset.role, { role: sel.value }); toast('Role updated'); } catch (err) { toast(err.message, true); usersView(); } });
+  $$('[data-role]').forEach(sel => sel.onchange = async () => { try { await PATCH('/users/' + sel.dataset.role, splitRole(sel.value)); toast('Role updated'); usersView(); } catch (err) { toast(err.message, true); usersView(); } });
   $$('[data-del]').forEach(b => b.onclick = async () => { if (confirm(`Remove ${b.dataset.name}? Their name stays on past activity.`)) { try { await DEL('/users/' + b.dataset.del); usersView(); } catch (err) { toast(err.message, true); } } });
   $$('[data-revoke]').forEach(b => b.onclick = async () => { await DEL('/users/invites/' + b.dataset.revoke); usersView(); });
 }
