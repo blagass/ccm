@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Branch managers see only their branch**: leads, search, lead pages, calendar and branch page are limited to their branch (enforced by the server); the Executive Summary, focus-list editing and Excel export are company-wide and not available to them.
+- **Operator role**: sees the Executive Summary, every branch, the Pipeline and Calendar, and can move leads between branches and route unassigned leads; users and settings stay admin-only. Operators get the team-picture welcome.
+- **Already a customer / Not interested**: new buttons on lead tables and briefs (and statuses). The lead closes, drops off open lists and totals, and the weekly scan skips it from then on; changing the status back resumes tracking.
 - **Assigned branch**: lead tables and the lead brief show an Assigned branch dropdown (with the person underneath) instead of Assigned rep. Admins and branch managers can move a lead to another branch; it goes to that branch's owner, is logged, and the weekly scan keeps the move. Reps see it read-only.
 - **Branch Manager role**: invite someone as Branch Manager for a branch (e.g. Kevin → Medford). They become that branch's owner (leads route to them, placeholder leads move to them), land on their branch page when they sign in, and get a branch version of the daily welcome. Same permissions as reps; users and settings stay admin-only.
 - **Branch merges**: Portland is merged into Springfield (owner Nyles). Portland/Salem leads keep their location but count toward Springfield on the branch page, the Executive Summary, routing and the Excel export. Set in settings (`branch_merges`); removing the merge restores a separate Portland branch.

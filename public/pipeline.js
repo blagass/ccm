@@ -11,7 +11,22 @@ const daysUntil = d => d ? Math.ceil((new Date(d + 'T23:59:59') - Date.now()) / 
 const priPill = p => `<span class="pill ${PRI_CLASS[p] || ''}">${esc(p)}</span>`;
 const multiline = s => esc(s).replace(/\n/g, '<br>');
 // "Assigned branch" control: a dropdown for admins/managers, plain text for reps. The person shows underneath.
-const canMoveLeads = () => ME && (ME.role === 'admin' || ME.role === 'manager');
+const canMoveLeads = () => ME && ['admin', 'operator', 'manager'].includes(ME.role);
+// "Already a customer" / "Not interested": close the lead; the weekly scan then leaves it alone.
+const CLOSE_OUTCOMES = [['Already a customer', '✓ Customer', 'Already a customer: we\'ll stop tracking it as a lead'], ['Not interested', '✕ Not interested', 'Not interested: the weekly scan will skip it']];
+function closeButtons(o) {
+  if (['Won', 'Lost', 'Not a fit', 'Already a customer', 'Not interested'].includes(o.status)) return '';
+  return `<div class="close-btns no-print">${CLOSE_OUTCOMES.map(([st, label, title]) => `<button class="btn sm" data-close-id="${o.id}" data-close-status="${esc(st)}" title="${esc(title)}">${label}</button>`).join('')}</div>`;
+}
+function wireCloseButtons(root, onDone) {
+  $$('[data-close-id]', root).forEach(btn => btn.onclick = async e => {
+    e.stopPropagation();
+    const st = btn.dataset.closeStatus;
+    if (!confirm(`Mark this lead "${st}"? It will drop off the open lists, and the weekly scan will skip it. You can change the status back later.`)) return;
+    try { const o = await PATCH('/opportunities/' + btn.dataset.closeId, { status: st }); toast(`Marked "${st}". The weekly scan will skip it.`); onDone && onDone(o); }
+    catch (err) { toast(err.message, true); }
+  });
+}
 function currentBranchOf(o, m) {
   const t = String(o.branch || '').toLowerCase();
   const direct = m.branches.find(b => t.startsWith(b.toLowerCase()));
@@ -103,6 +118,7 @@ const fmtShortDate = d => new Date(d + 'T00:00:00Z').toLocaleDateString(undefine
 
 // ---------- Executive Summary ----------
 async function execSummary(q) {
+  if (ME && ME.role === 'manager' && ME.branch) return location.replace('#/branch/' + encodeURIComponent(ME.branch));
   const m = await pmeta();
   const [s, openOpps] = await Promise.all([GET('/pipeline/summary' + (q.get('week') ? '?week=' + q.get('week') : '')), GET('/opportunities?open=true')]);
   const t = s.tiles, rep = s.report;
@@ -261,7 +277,7 @@ async function pipelineList(q) {
         <td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
         <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
         <td>${branchCell(o, m)}</td>
-        <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select></td></tr>`).join('')}
+        <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select>${closeButtons(o)}</td></tr>`).join('')}
     </tbody></table></div><p class="muted small">${rows.length} shown. ${canMoveLeads() ? 'Assigned branch and ' : ''}Status save${canMoveLeads() ? '' : 's'} as soon as you change them. Moving a lead to another branch hands it to that branch's owner.</p>`
     : '<div class="empty">Nothing matches these filters.</div>'}
   </div>`;
@@ -278,6 +294,7 @@ async function pipelineList(q) {
     catch (err) { toast(err.message, true); }
   });
   wireBranchMoves(view, () => route());
+  wireCloseButtons(view, () => route());
 }
 
 // ---------- One-page brief ----------
@@ -321,12 +338,13 @@ async function opportunityBrief(id) {
   const dl = daysUntil(o.deadline);
   view.innerHTML = `<datalist id="reps">${m.reps.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
   <div class="head no-print"><a href="#/pipeline?list=${o.list_type}" class="muted">← ${esc(m.list_types[o.list_type])}</a>
-    <div class="row" style="flex:0 0 auto"><button class="btn" id="add-focus">★ Add to this week's focus</button><button class="btn" onclick="print()">Print brief</button><button class="btn" id="toggle-edit">Edit all fields</button><button class="btn danger" id="del">Delete</button></div></div>
+    <div class="row" style="flex:0 0 auto">${ME && ME.role === 'manager' ? '' : `<button class="btn" id="add-focus">★ Add to this week's focus</button>`}<button class="btn" onclick="print()">Print brief</button><button class="btn" id="toggle-edit">Edit all fields</button><button class="btn danger" id="del">Delete</button></div></div>
   <div class="card brief">
     <div class="brief-title"><div><h1>${esc(o.business)}</h1><div class="muted">${esc(o.location)} • Branch: ${esc(o.branch)} • ${esc(m.list_types[o.list_type])} • first seen week of ${fmtWeek(o.first_seen_week)}${o.last_seen_week !== o.first_seen_week ? `, last seen ${fmtWeek(o.last_seen_week)}` : ''}</div></div>
       <span class="pill ${PRI_CLASS[o.priority]}" style="font-size:15px;padding:4px 12px">${esc(o.priority.toUpperCase())} ${o.list_type === 'switch' ? 'SWITCH PROSPECT' : o.list_type === 'chain' ? 'ACCOUNT' : 'LEAD'}</span></div>
     <div class="row quick">
       <label>Assigned branch<div class="qb">${branchCell(o, m)}</div></label>
+      ${closeButtons(o) ? `<label>Close out${closeButtons(o)}</label>` : ''}
       <label>Status<select data-q="status">${opts(m.statuses, o.status)}</select></label>
       <label>Priority<select data-q="priority">${opts(m.priorities, o.priority)}</select></label>
       ${o.deadline ? `<label>Deadline<div class="pill ${dl <= 7 ? 'bad' : 'warn'}" style="font-size:14px;padding:6px 10px">${esc(o.deadline)} (${dl < 0 ? 'past' : dl + ' days'})</div></label>` : ''}
@@ -350,12 +368,13 @@ async function opportunityBrief(id) {
     <ul class="timeline">${o.activity.map(a => `<li><span class="t">${fmt(a.created_at)}</span><span class="${a.type === 'note' ? 'note' : ''}">${a.user_name ? `<b>${esc(a.user_name)}:</b> ` : ''}${esc(a.summary)}</span></li>`).join('')}</ul></div>`;
 
   wireBranchMoves(view, () => route());
+  wireCloseButtons(view, () => route());
   $$('[data-q]').forEach(el => el.onchange = async () => {
     try { await PATCH('/opportunities/' + id, { [el.dataset.q]: el.value }); toast('Saved'); if (['priority', 'status'].includes(el.dataset.q)) route(); }
     catch (err) { toast(err.message, true); }
   });
   if (typeof renderLeadTasks === 'function') renderLeadTasks($('#lead-tasks'), o);
-  $('#add-focus').onclick = async () => {
+  if ($('#add-focus')) $('#add-focus').onclick = async () => {
     const week = m.weeks[0] || m.current_week;
     try { await POST(`/pipeline/reports/${week}/focus`, { opportunity_id: o.id }); toast(`Added to the focus list for the week of ${fmtWeek(week)}`); }
     catch (err) { toast(err.message, true); }

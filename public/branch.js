@@ -19,14 +19,14 @@ async function branchView(name, q) {
   const b = await GET(`/branches/${encodeURIComponent(name)}?${params}`);
   const t = b.tiles;
   const tab = q.get('tab') || 'open';
-  const isClosed = o => ['Won', 'Lost', 'Not a fit'].includes(o.status);
+  const isClosed = o => ['Won', 'Lost', 'Not a fit', 'Already a customer', 'Not interested'].includes(o.status);
   const tabs = {
     open: ['Open', o => !isClosed(o)],
     hot: ['Hot', o => o.priority === 'Hot' && !isClosed(o)],
     new: ['New this week', o => o.first_seen_week === b.week],
     switch: ['Switch prospects', o => o.list_type === 'switch' && !isClosed(o)],
     chain: ['Chain & franchise', o => o.list_type === 'chain' && !isClosed(o)],
-    closed: ['Won / lost', isClosed],
+    closed: ['Closed', isClosed],
   };
   const leads = b.leads.filter(tabs[tab]?.[1] || tabs.open[1]);
   const link = (k, v) => { const p = new URLSearchParams(q); p.set(k, v); return `#/branch/${encodeURIComponent(b.branch)}?${p}`; };
@@ -36,7 +36,7 @@ async function branchView(name, q) {
   const reps = `<datalist id="reps">${m.reps.map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
 
   view.innerHTML = `${reps}
-  <div class="branch-tabs no-print">${m.branches.map(x => `<a href="#/branch/${encodeURIComponent(x)}${q.get('week') ? '?week=' + q.get('week') : ''}" class="${x === b.branch ? 'on' : ''}">${esc(x)}${m.my_branches.includes(x) ? ' <span class="mine">★</span>' : ''}</a>`).join('')}</div>
+  <div class="branch-tabs no-print">${(m.only_branch ? [m.only_branch] : m.branches).map(x => `<a href="#/branch/${encodeURIComponent(x)}${q.get('week') ? '?week=' + q.get('week') : ''}" class="${x === b.branch ? 'on' : ''}">${esc(x)}${m.my_branches.includes(x) ? ' <span class="mine">★</span>' : ''}</a>`).join('')}</div>
   <div class="head"><div><h1>${esc(b.branch)} Branch${b.includes.length ? ` <span class="incl">incl. ${b.includes.map(esc).join(', ')}</span>` : ''}</h1>
       <div class="muted">${b.owner ? `Branch owner: <b>${esc(b.owner)}</b>` : '<span class="pill warn">No branch owner yet</span> <a href="#/settings">set one in Settings</a>'} · Week of ${fmtWeek(b.week)}</div></div>
     <div class="row no-print" style="flex:0 0 auto">
@@ -106,6 +106,13 @@ async function branchView(name, q) {
       $$('[data-btab]').forEach(x => { const [label, fn] = tabs[x.dataset.btab]; x.textContent = `${label} (${b.leads.filter(fn).length})`; });
       wireInline();
     });
+    wireCloseButtons($('#branch-leads'), closed => {
+      const o = b.leads.find(x => x.id === closed.id); if (o) o.status = closed.status;
+      const active = $('[data-btab].active')?.dataset.btab || 'open';
+      $('#branch-leads').innerHTML = leadsTable(b.leads.filter(tabs[active][1]));
+      $$('[data-btab]').forEach(x => { const [label, fn] = tabs[x.dataset.btab]; x.textContent = `${label} (${b.leads.filter(fn).length})`; });
+      wireInline();
+    });
     $$('#branch-leads .inline:not(.branch-move)').forEach(el => el.onchange = async () => {
       try {
         await PATCH('/opportunities/' + el.dataset.id, { [el.dataset.f]: el.value });
@@ -124,7 +131,7 @@ async function branchView(name, q) {
         <td class="small">${esc(o.stage)}</td><td class="small">${esc((o.deal_size || '').split(' (')[0])}</td>
         <td class="small">${o.deadline ? `<span class="pill ${daysUntil(o.deadline) <= 7 ? 'bad' : 'warn'}">${daysUntil(o.deadline) < 0 ? 'past due' : 'due in ' + daysUntil(o.deadline) + 'd'}</span> ` : ''}${esc(o.decision_timeline || '')}</td>
         <td>${branchCell(o, m)}</td>
-        <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select></td></tr>`).join('')}
+        <td><select class="inline" data-id="${o.id}" data-f="status">${opts(m.statuses, o.status)}</select>${closeButtons(o)}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">No leads here.</div>';
   }
 

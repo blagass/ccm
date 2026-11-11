@@ -93,7 +93,7 @@ function mondaysBetween(from, to) {
 
 // Everything on the calendar between two dates (inclusive). `mine` filters tasks to one person
 // (plus unassigned ones); pipeline items are filtered to leads assigned to them or to nobody.
-function calendar({ from, to, mine, today }) {
+function calendar({ from, to, mine, today, branch }) {
   if (!isDate(from) || !isDate(to) || from > to) throw err('from/to must be dates');
   const taskRows = db.prepare(`${SELECT} WHERE t.due_date BETWEEN ? AND ? ${mine ? "AND (t.assigned_to = ? OR t.assigned_to = '')" : ''} ORDER BY t.done, t.due_date, t.id`)
     .all(...(mine ? [from, to, mine] : [from, to]));
@@ -105,7 +105,8 @@ function calendar({ from, to, mine, today }) {
   const events = [];
   const repFilter = mine ? "AND (assigned_rep = ? OR assigned_rep = '' OR assigned_rep IS NULL)" : '';
   for (const o of db.prepare(`SELECT id, business, priority, branch, stage, assigned_rep, status, deadline FROM opportunities
-      WHERE deadline BETWEEN ? AND ? AND status NOT IN ('Won','Lost','Not a fit') ${repFilter}`).all(...(mine ? [from, to, mine] : [from, to]))) {
+      WHERE deadline BETWEEN ? AND ? AND status NOT IN ${require('./pipeline').CLOSED_SQL} ${repFilter}`).all(...(mine ? [from, to, mine] : [from, to]))) {
+    if (branch && !require('./branch').inBranch(o, branch)) continue;
     events.push({ date: o.deadline, kind: 'deadline', title: `${o.business}: ${o.stage || 'deadline'}`, priority: o.priority, opportunity_id: o.id, assigned_rep: o.assigned_rep, branch: o.branch });
   }
   // Dated actions from each week's executive focus list.
@@ -114,6 +115,17 @@ function calendar({ from, to, mine, today }) {
     for (const f of pipeline.enrichFocus(r.focus)) {
       const d = looseDate(f.deadline, r.week_of) || (f.opp && f.opp.deadline) || null;
       if (d && d >= from && d <= to) events.push({ date: d, kind: 'focus', title: f.label || f.action, branch: f.branch, detail: f.deadline, week_of: r.week_of, opportunity_id: f.opportunity_id });
+    }
+  }
+  if (branch) {
+    // Branch managers only see their branch: tasks on other branches' leads and their focus items drop out.
+    const { inBranch } = require('./branch');
+    const pipeline = require('./pipeline');
+    const ok = t => !t.opportunity_id || (o => o && inBranch(o, branch))(pipeline.get(t.opportunity_id));
+    for (const list of [taskRows, overdue]) for (let i = list.length - 1; i >= 0; i--) if (!ok(list[i])) list.splice(i, 1);
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.kind === 'focus' && e.opportunity_id && !ok({ opportunity_id: e.opportunity_id })) events.splice(i, 1);
     }
   }
   for (const m of mondaysBetween(from, to)) events.push({ date: m, kind: 'scan', title: 'Weekly lead scan arrives (5:39am)', week_of: m });

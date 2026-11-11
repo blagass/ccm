@@ -88,6 +88,7 @@ async function importWorkbook(buffer, { week } = {}) {
       const res = pipeline.upsertFromScan(data, week);
       if (res.action === 'created') report.created++;
       else if (res.action === 'updated') report.updated++;
+      else if (res.action === 'skipped') (report.skipped = report.skipped || []).push(res.note);
       else report.duplicates.push(res.note);
       count++;
     });

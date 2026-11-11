@@ -44,7 +44,7 @@ function bind(root, state, onChange) {
 
 // ---------- Auth ----------
 let ME = null;
-const roleLabel = u => u.role === 'admin' ? 'Admin' : u.role === 'manager' ? `Branch Manager · ${u.branch || '?'}` : 'Rep';
+const roleLabel = u => u.role === 'admin' ? 'Admin' : u.role === 'operator' ? 'Operator' : u.role === 'manager' ? `Branch Manager · ${u.branch || '?'}` : 'Rep';
 function showLogin() { $('#shell').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#login').classList.remove('hidden'); }
 $('#login-form').addEventListener('submit', async e => {
   e.preventDefault();
@@ -61,6 +61,8 @@ async function boot() {
   ME = me.user;
   $('#login').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#shell').classList.remove('hidden');
   $$('.admin-only').forEach(el => el.classList.toggle('hidden', ME.role !== 'admin'));
+  // Branch managers only see their own branch, so the company-wide Executive Summary isn't in their menu.
+  $$('.not-manager').forEach(el => el.classList.toggle('hidden', ME.role === 'manager'));
   GET('/settings').then(st => $('#nav-marketing').classList.toggle('hidden', !st.show_marketing)).catch(() => {});
   $('#whoami').innerHTML = `${esc(ME.name)}<div>${esc(roleLabel(ME))}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
   // Branch managers start on their own branch page.
@@ -634,7 +636,7 @@ async function acceptInvite(token) {
 // ---------- Users (admins) ----------
 async function usersView() {
   const [d, pm] = await Promise.all([GET('/users'), GET('/pipeline/meta')]);
-  const roleOpts = [['rep', 'Rep'], ...pm.branches.map(b => [`manager:${b}`, `Branch Manager – ${b}`]), ['admin', 'Admin']];
+  const roleOpts = [['rep', 'Rep'], ...pm.branches.map(b => [`manager:${b}`, `Branch Manager – ${b}`]), ['operator', 'Operator'], ['admin', 'Admin']];
   const roleVal = u => u.role === 'manager' ? `manager:${u.branch}` : u.role;
   const roleOptions = sel => roleOpts.map(([v, l]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
   const roleSel = (id, u) => `<select data-role="${id}" style="width:auto">${roleOptions(roleVal(u))}</select>`;
@@ -649,7 +651,7 @@ async function usersView() {
       </form>
       <div id="inv-result"></div>
       <p class="muted small">Links work once and expire after ${d.invite_days} days. If email is set up, the invite is also emailed.</p>
-      <p class="muted small"><b>Branch Managers</b> become their branch's owner (new leads there route to them), land on their branch page when they sign in, and get a branch version of the daily welcome. Admins manage users and settings; reps and managers work leads.</p>
+      <p class="muted small"><b>Branch Managers</b> see only their branch's leads, become its owner (new leads there route to them), land on their branch page and get a branch version of the daily welcome. <b>Operators</b> see the Executive Summary and every branch, and can move leads between branches. <b>Admins</b> also manage users and settings. <b>Reps</b> work leads.</p>
     </div>
     <div class="grid" style="align-content:start">
       <div class="card"><h2>Team</h2>${d.users.length ? `<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr>

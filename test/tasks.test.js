@@ -34,7 +34,7 @@ test('tasks: create, validate, complete, move, delete; linked to a lead', async 
   leadId = (await req('POST', '/api/opportunities', { business: 'Corbett School District', priority: 'Hot', stage: 'Open bid – closes Nov 17, 2026', deadline: '2026-11-17', assigned_rep: 'Owner' })).body.id;
   assert.equal((await req('POST', '/api/tasks', { title: 'x', due_date: 'tomorrow' })).status, 400);
   assert.equal((await req('POST', '/api/tasks', { title: '  ', due_date: '2026-11-10' })).status, 400);
-  assert.equal((await req('POST', '/api/tasks', { title: 'x', due_date: '2026-11-10', opportunity_id: 9999 })).status, 400);
+  assert.equal((await req('POST', '/api/tasks', { title: 'x', due_date: '2026-11-10', opportunity_id: 9999 })).status, 404, 'unknown lead');
   const t = await req('POST', '/api/tasks', { title: 'Send pricing to GCs', due_date: '2026-11-12', assigned_to: 'Owner', opportunity_id: leadId });
   assert.equal(t.status, 201);
   assert.equal(t.body.opportunity, 'Corbett School District');

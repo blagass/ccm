@@ -379,17 +379,30 @@ api.put('/workflows/:id', (req, res) => {
 api.delete('/workflows/:id', (req, res) => { db.prepare('DELETE FROM workflows WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
 
 // ---------- Sales pipeline (weekly lead scan, switch prospects, chain accounts) ----------
+// Branch managers only see their own branch's leads; everyone else sees the whole pipeline.
+const managerOf = u => (u && u.role === 'manager' && u.branch) ? u.branch : null;
+const canSee = (u, o) => !managerOf(u) || (o && branchPage.inBranch(o, managerOf(u)));
+const visibleOpp = (req, id) => { const o = pipeline.get(Number(id)); return o && canSee(req.user, o) ? o : null; };
+function notForManagers(req, res, next) {
+  if (managerOf(req.user)) return res.status(403).json({ error: 'Branch managers see their branch page instead' });
+  next();
+}
+const requireOps = (req, res, next) => (req.user && (req.user.role === 'admin' || req.user.role === 'operator')) ? next() : res.status(403).json({ error: 'Only admins and operators can do that' });
 api.get('/pipeline/meta', (req, res) => res.json({
   list_types: pipeline.LIST_TYPES, priorities: pipeline.PRIORITIES, statuses: pipeline.STATUSES, columns: pipeline.COLUMNS,
   branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...users.names(), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
   weeks: pipeline.weeks(), current_week: pipeline.mondayOf(),
-  branch_owners: getSettings().branch_owners || {}, branch_merges: getSettings().branch_merges || {}, my_branches: branchPage.branchesOwnedBy(req.user.name, req.user.role === 'manager' ? req.user.branch : null),
+  branch_owners: getSettings().branch_owners || {}, branch_merges: getSettings().branch_merges || {}, only_branch: managerOf(req.user), my_branches: branchPage.branchesOwnedBy(req.user.name, req.user.role === 'manager' ? req.user.branch : null),
 }));
-api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
-api.get('/branches/:branch', (req, res) => res.json(branchPage.branchSummary(req.params.branch, { week: req.query.week, today: req.query.today })));
-api.put('/pipeline/reports/:week', (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
-api.post('/pipeline/assign-by-branch', requireAdmin, (req, res) => res.json({ assigned: pipeline.assignByBranch(req.user.name) }));
-api.post('/pipeline/reports/:week/focus', (req, res) => {
+api.get('/pipeline/summary', notForManagers, (req, res) => res.json(pipeline.summary(req.query.week)));
+api.get('/branches/:branch', (req, res) => {
+  const b = branchPage.resolveBranch(req.params.branch);
+  if (managerOf(req.user) && managerOf(req.user) !== b) return res.status(403).json({ error: `You can see the ${managerOf(req.user)} branch` });
+  res.json(branchPage.branchSummary(b, { week: req.query.week, today: req.query.today }));
+});
+api.put('/pipeline/reports/:week', notForManagers, (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
+api.post('/pipeline/assign-by-branch', requireOps, (req, res) => res.json({ assigned: pipeline.assignByBranch(req.user.name) }));
+api.post('/pipeline/reports/:week/focus', notForManagers, (req, res) => {
   const o = pipeline.get(Number(req.body.opportunity_id));
   if (!o) return res.status(404).json({ error: 'Prospect not found' });
   const cur = pipeline.getReport(req.params.week).focus || [];
@@ -398,38 +411,50 @@ api.post('/pipeline/reports/:week/focus', (req, res) => {
   pipeline.log(o.id, 'focus', `Added to the focus list for the week of ${req.params.week}`, req.user.name);
   res.status(201).json(saved);
 });
-api.get('/opportunities', (req, res) => res.json(pipeline.list(req.query)));
-api.post('/opportunities', (req, res) => res.status(201).json(pipeline.create(req.body, { week: req.body.week, actor: req.user.name })));
+api.get('/opportunities', (req, res) => {
+  const q = { ...req.query };
+  if (managerOf(req.user)) q.branch = managerOf(req.user);
+  res.json(pipeline.list(q));
+});
+api.post('/opportunities', (req, res) => {
+  const body = { ...req.body };
+  if (managerOf(req.user)) body.branch = managerOf(req.user);
+  res.status(201).json(pipeline.create(body, { week: body.week, actor: req.user.name }));
+});
 api.get('/opportunities/:id', (req, res) => {
-  const o = pipeline.get(req.params.id);
+  const o = visibleOpp(req, req.params.id);
   if (!o) return res.status(404).json({ error: 'Not found' });
   res.json({ ...o, personas: pipeline.personasFor(o.persona), activity: pipeline.activity(o.id) });
 });
-// Moving a lead between branches is for admins and branch managers.
-const canMove = u => u && (u.role === 'admin' || u.role === 'manager');
+// Moving a lead between branches is for admins, operators and branch managers (managers: their own leads).
+const canMove = u => u && ['admin', 'operator', 'manager'].includes(u.role);
 api.post('/opportunities/:id/branch', (req, res) => {
-  if (!canMove(req.user)) return res.status(403).json({ error: 'Only admins and branch managers can move leads between branches' });
+  if (!canMove(req.user)) return res.status(403).json({ error: 'Only admins, operators and branch managers can move leads between branches' });
+  if (!visibleOpp(req, req.params.id)) return res.status(404).json({ error: 'Not found' });
   const o = pipeline.moveToBranch(Number(req.params.id), req.body?.branch, req.user.name);
   o ? res.json(o) : res.status(404).json({ error: 'Not found' });
 });
 api.patch('/opportunities/:id', (req, res) => {
-  const cur = pipeline.get(Number(req.params.id));
+  const cur = visibleOpp(req, req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Not found' });
   if (cur && req.body && req.body.branch !== undefined && req.body.branch !== cur.branch && !canMove(req.user)) {
-    return res.status(403).json({ error: 'Only admins and branch managers can move leads between branches' });
+    return res.status(403).json({ error: 'Only admins, operators and branch managers can move leads between branches' });
   }
   const o = pipeline.update(Number(req.params.id), req.body, { actor: req.user.name });
   o ? res.json(o) : res.status(404).json({ error: 'Not found' });
 });
-api.delete('/opportunities/:id', (req, res) => { db.prepare('DELETE FROM opportunities WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
+api.delete('/opportunities/:id', (req, res) => {
+  if (!visibleOpp(req, req.params.id)) return res.status(404).json({ error: 'Not found' }); db.prepare('DELETE FROM opportunities WHERE id = ?').run(req.params.id); res.json({ ok: true }); });
 api.post('/opportunities/:id/notes', (req, res) => {
   const t = String(req.body.text || '').trim();
-  if (!t || !pipeline.get(req.params.id)) return res.status(400).json({ error: 'Note text required' });
+  if (!visibleOpp(req, req.params.id)) return res.status(404).json({ error: 'Not found' });
+  if (!t) return res.status(400).json({ error: 'Note text required' });
   pipeline.log(Number(req.params.id), 'note', t, req.user.name);
   res.json({ ok: true });
 });
 // Turn a prospect into a marketing contact so workflows/emails can run against them.
 api.post('/opportunities/:id/contact', (req, res) => {
-  const o = pipeline.get(req.params.id);
+  const o = visibleOpp(req, req.params.id);
   if (!o) return res.status(404).json({ error: 'Not found' });
   const { contact } = contacts.upsert({ ...req.body, company: o.business, properties: { branch: o.branch, opportunity_id: o.id } }, { source: 'pipeline' });
   contacts.addTag(contact.id, 'pipeline');
@@ -454,7 +479,9 @@ api.post('/pipeline/scan', (req, res) => {
   opportunities.forEach((o, i) => {
     try {
       const r = pipeline.upsertFromScan(o, week);
-      if (r.action === 'created') out.created++; else if (r.action === 'updated') out.updated++; else out.duplicates.push(r.note);
+      if (r.action === 'created') out.created++; else if (r.action === 'updated') out.updated++;
+      else if (r.action === 'skipped') (out.skipped = out.skipped || []).push(r.note);
+      else out.duplicates.push(r.note);
     } catch (e) { out.errors.push({ row: i, business: o?.business, error: e.message }); }
   });
   // Never let automated research overwrite notes a person imported or edited for that week.
@@ -465,7 +492,7 @@ api.post('/pipeline/scan', (req, res) => {
   }
   res.json(out);
 });
-api.get('/pipeline/export.xlsx', wrap(async (req, res) => {
+api.get('/pipeline/export.xlsx', notForManagers, wrap(async (req, res) => {
   const { buffer, filename } = await xlsx.exportWorkbook(req.query.week, { company: getSettings().company_name, scope: req.query.scope });
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${filename}"` }).send(Buffer.from(buffer));
 }));
@@ -483,11 +510,14 @@ api.get('/welcome', (req, res) => {
 });
 
 // ---------- Calendar & tasks ----------
-api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null })));
-api.post('/tasks', (req, res) => res.status(201).json(tasks.create(req.body || {}, req.user.name)));
+api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null, branch: managerOf(req.user) })));
+api.post('/tasks', (req, res) => {
+  if (req.body?.opportunity_id && !visibleOpp(req, req.body.opportunity_id)) return res.status(404).json({ error: 'Lead not found' });
+  res.status(201).json(tasks.create(req.body || {}, req.user.name));
+});
 api.patch('/tasks/:id', (req, res) => { const t = tasks.update(Number(req.params.id), req.body || {}, req.user.name); t ? res.json(t) : res.status(404).json({ error: 'Not found' }); });
 api.delete('/tasks/:id', (req, res) => { tasks.remove(Number(req.params.id)); res.json({ ok: true }); });
-api.get('/opportunities/:id/tasks', (req, res) => res.json(tasks.forLead(Number(req.params.id))));
+api.get('/opportunities/:id/tasks', (req, res) => visibleOpp(req, req.params.id) ? res.json(tasks.forLead(Number(req.params.id))) : res.status(404).json({ error: 'Not found' }));
 
 // ---------- Team (admins only) ----------
 api.get('/users', requireAdmin, (req, res) => res.json({ users: users.list(), invites: users.pendingInvites(), invite_days: users.INVITE_DAYS }));

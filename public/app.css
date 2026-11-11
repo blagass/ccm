@@ -239,3 +239,8 @@ ul.upcoming .when{min-width:96px;font-weight:700;color:var(--navy);font-size:13p
 
 select.branch-move{min-width:130px;font-weight:700;color:var(--navy)}
 .quick .qb{display:flex;flex-direction:column;gap:2px;font-weight:400}.quick .qb select{width:190px}
+
+.close-btns{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.close-btns .btn.sm{padding:2px 7px;font-size:11px;font-weight:600;color:#475467;background:#fff}
+.close-btns .btn.sm:hover{border-color:var(--brand);color:var(--navy)}
+.quick .close-btns{margin-top:0}

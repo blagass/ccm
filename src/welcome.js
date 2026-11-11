@@ -4,7 +4,7 @@ const { db } = require('./db');
 const pipeline = require('./pipeline');
 require('./tasks'); // ensures the tasks table exists
 
-const CLOSED = "('Won','Lost','Not a fit')";
+const CLOSED = pipeline.CLOSED_SQL;
 const dayName = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
 const shortDate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
@@ -78,7 +78,7 @@ function briefing(user, { today, hour }) {
   if (user.role === 'manager' && user.branch) return managerBriefing(user, { today, hour });
   const first = firstName(user.name);
   const me = first ? user.name : null;              // whose tasks/leads are "mine"
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || user.role === 'operator';   // operators get the team picture too
   const seed = [...String(today)].reduce((a, c) => a + c.charCodeAt(0), 0) + (user.id || 0);
 
   const mineSql = me ? "AND (assigned_to = ? OR assigned_to = '')" : '';

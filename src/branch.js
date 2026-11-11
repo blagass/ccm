@@ -5,7 +5,7 @@ const { db, parse, getSettings } = require('./db');
 const pipeline = require('./pipeline');
 require('./tasks'); // ensures the tasks table exists
 
-const CLOSED = ['Won', 'Lost', 'Not a fit'];
+const CLOSED = pipeline.CLOSED;
 const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const err = (msg, status = 400) => Object.assign(new Error(msg), { status });
 
@@ -106,4 +106,4 @@ function branchesOwnedBy(name, managerOf) {
   return out;
 }
 
-module.exports = { branchSummary, branchesOwnedBy, resolveBranch };
+module.exports = { branchSummary, branchesOwnedBy, resolveBranch, inBranch };

@@ -5,8 +5,11 @@ const { db, parse, getSettings } = require('./db');
 
 const LIST_TYPES = { lead: "This Week's Leads", switch: 'Switch Prospects', chain: 'Chain & Franchisee Accounts' };
 const PRIORITIES = ['Hot', 'Warm', 'Watch'];
-const STATUSES = ['New', 'Contacted', 'Meeting set', 'Quoted', 'Won', 'Lost', 'Not a fit'];
-const CLOSED = ['Won', 'Lost', 'Not a fit'];
+const STATUSES = ['New', 'Contacted', 'Meeting set', 'Quoted', 'Won', 'Lost', 'Not a fit', 'Already a customer', 'Not interested'];
+// Leads marked with these are left alone by the weekly scan: no updates, never re-added.
+const SKIP_STATUSES = ['Already a customer', 'Not interested'];
+const CLOSED = ['Won', 'Lost', 'Not a fit', ...SKIP_STATUSES];
+const CLOSED_SQL = `(${CLOSED.map(s => `'${s}'`).join(',')})`;
 
 // The 23 spreadsheet columns, in order. `rep: true` = gold "rep to confirm/complete" column.
 const COLUMNS = [
@@ -125,7 +128,7 @@ function moveToBranch(id, branch, actor) {
 // Apply branch owners to every open lead that has nobody yet. Returns counts per owner.
 function assignByBranch(actor) {
   const out = {};
-  for (const o of db.prepare("SELECT id FROM opportunities WHERE (assigned_rep IS NULL OR assigned_rep = '') AND status NOT IN ('Won','Lost','Not a fit')").all()) {
+  for (const o of db.prepare(`SELECT id FROM opportunities WHERE (assigned_rep IS NULL OR assigned_rep = '') AND status NOT IN ${CLOSED_SQL}`).all()) {
     if (autoAssign(o.id, actor)) { const who = get(o.id).assigned_rep; out[who] = (out[who] || 0) + 1; }
   }
   return out;
@@ -210,6 +213,7 @@ function upsertFromScan(input, week) {
   const key = businessKey(input.business);
   const existing = parse(db.prepare('SELECT * FROM opportunities WHERE business_key = ?').get(key));
   if (!existing) return { action: 'created', row: create(input, { week, actor: `scan ${week}` }) };
+  if (SKIP_STATUSES.includes(existing.status)) return { action: 'skipped', row: existing, note: `${existing.business} is marked "${existing.status}"` };
   if (existing.list_type !== (input.list_type || existing.list_type) && existing.last_seen_week === week) {
     return { action: 'duplicate', row: existing, note: `${input.business} is already on ${LIST_TYPES[existing.list_type]} this week` };
   }
@@ -413,6 +417,7 @@ function personasFor(text) {
 function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE opportunity_id = ? ORDER BY id DESC').all(id); }
 
 module.exports = {
+  CLOSED, CLOSED_SQL, SKIP_STATUSES,
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
   get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, setBranchOwner, moveToBranch, personas, upsertPersona, personasFor, activity, log,
 };

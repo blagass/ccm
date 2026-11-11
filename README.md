@@ -56,7 +56,7 @@ A self-hosted alternative to HubSpot for **forms, lead management, marketing aut
 
 **Team accounts**
 - Admins invite people from **Users**. Each invite is a single-use link that expires after 7 days; it's also emailed when SMTP is configured. The invited person picks their own name and password.
-- Roles: **Admin** (manages users and settings, imports weekly files), **Branch Manager** for a branch (becomes its owner, lands on its branch page, branch-focused welcome) and **Rep**.
+- Roles: **Admin** (everything, including users and settings), **Operator** (Executive Summary, all branches, moves leads between branches), **Branch Manager** for a branch (sees only that branch, becomes its owner, lands on its branch page, branch-focused welcome) and **Rep** (works leads).
 - Admins can reset passwords (by sending a new link), change roles, and disable or remove users. Disabling someone signs them out immediately.
 - Pipeline status changes, assignments and notes record who made them, and every user appears in the "Assigned rep" list.
 - The owner login (leave email blank, use `ADMIN_PASSWORD`) always works, so you can't get locked out.

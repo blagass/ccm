@@ -28,13 +28,13 @@ CREATE TABLE IF NOT EXISTS invites (
 );
 `);
 
-// admin: everything · manager: runs one branch (branch column) · rep: works leads
-const ROLES = ['admin', 'manager', 'rep'];
+// admin: everything · operator: whole pipeline + routing, no users/settings · manager: one branch only · rep: works leads
+const ROLES = ['admin', 'operator', 'manager', 'rep'];
 try { db.exec('ALTER TABLE users ADD COLUMN branch TEXT'); } catch { /* exists */ }
 try { db.exec('ALTER TABLE invites ADD COLUMN branch TEXT'); } catch { /* exists */ }
 const { getSettings } = require('./db');
 function checkRole(role, branch) {
-  if (!ROLES.includes(role)) throw err('Role must be admin, manager or rep');
+  if (!ROLES.includes(role)) throw err('Role must be admin, operator, manager or rep');
   if (role !== 'manager') return null;
   const b = (getSettings().branches || []).find(x => x.toLowerCase() === String(branch || '').toLowerCase());
   if (!b) throw err('Pick which branch this manager runs');
