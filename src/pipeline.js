@@ -52,9 +52,20 @@ function parseDeal(text) {
 }
 
 // Branch matching mirrors the spreadsheet's COUNTIF("Boise*") prefix rule.
+// Merged branches (settings.branch_merges, e.g. { Portland: 'Springfield' }) keep their own name in the
+// lead's Branch text but count toward the branch they were merged into.
+function branchAliases(branch) {
+  const merges = getSettings().branch_merges || {};
+  return [branch, ...Object.entries(merges).filter(([, to]) => to === branch).map(([from]) => from)];
+}
 function primaryBranch(branchText) {
   const { branches } = getSettings();
-  return branches.find(b => String(branchText || '').toLowerCase().startsWith(b.toLowerCase())) || null;
+  const merges = getSettings().branch_merges || {};
+  const t = String(branchText || '').toLowerCase();
+  const direct = branches.find(b => t.startsWith(b.toLowerCase()));
+  if (direct) return direct;
+  const merged = Object.keys(merges).find(from => t.startsWith(from.toLowerCase()));
+  return merged ? merges[merged] : null;
 }
 
 function mondayOf(date = new Date()) {
@@ -184,7 +195,10 @@ function list({ list_type, priority, branch, status, rep, week, q, open } = {}) 
   const where = [], vals = [];
   if (list_type) { where.push('list_type = ?'); vals.push(list_type); }
   if (priority) { where.push('priority = ?'); vals.push(priority); }
-  if (branch) { where.push('branch LIKE ?'); vals.push(`${branch}%`); }
+  if (branch) {
+    const names = branchAliases(branch);
+    where.push(`(${names.map(() => 'branch LIKE ?').join(' OR ')})`); vals.push(...names.map(n => `${n}%`));
+  }
   if (status) { where.push('status = ?'); vals.push(status); }
   if (rep === '__none') where.push("(assigned_rep IS NULL OR assigned_rep = '')");
   else if (rep) { where.push('assigned_rep = ?'); vals.push(rep); }
@@ -367,5 +381,5 @@ function activity(id) { return db.prepare('SELECT * FROM opp_activities WHERE op
 
 module.exports = {
   LIST_TYPES, PRIORITIES, STATUSES, COLUMNS, REP_FIELDS, businessKey, parseDeal, primaryBranch, mondayOf,
-  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, personas, upsertPersona, personasFor, activity, log,
+  get, create, update, upsertFromScan, list, weeks, summary, getReport, saveReport, enrichFocus, autoLink, mentions, branchOwner, autoAssign, assignByBranch, claimPlaceholderName, branchAliases, personas, upsertPersona, personasFor, activity, log,
 };

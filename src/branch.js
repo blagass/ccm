@@ -10,11 +10,17 @@ const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x
 const err = (msg, status = 400) => Object.assign(new Error(msg), { status });
 
 function resolveBranch(name) {
-  const b = getSettings().branches.find(x => x.toLowerCase() === String(name || '').toLowerCase());
-  if (!b) throw err(`Unknown branch: ${name}`, 404);
-  return b;
+  const n = String(name || '').toLowerCase();
+  const b = getSettings().branches.find(x => x.toLowerCase() === n);
+  if (b) return b;
+  const merges = getSettings().branch_merges || {};
+  const from = Object.keys(merges).find(x => x.toLowerCase() === n);   // /branch/Portland → Springfield
+  if (from) return merges[from];
+  throw err(`Unknown branch: ${name}`, 404);
 }
-const inBranch = (o, b) => new RegExp(`\\b${b}\\b`, 'i').test(o.branch || '');
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const branchRe = b => new RegExp(`\\b(${pipeline.branchAliases(b).map(esc).join('|')})\\b`, 'i');
+const inBranch = (o, b) => branchRe(b).test(o.branch || '');
 
 function branchSummary(name, { week, today } = {}) {
   const branch = resolveBranch(name);
@@ -59,7 +65,7 @@ function branchSummary(name, { week, today } = {}) {
     else if (f.opps && f.opps.length) {
       const here = f.opps.filter(x => inBranch(x, branch));
       if (here.length) focus.push({ ...f, opps: here });
-    } else if (new RegExp(`\\b${branch}\\b|^all\\b`, 'i').test(f.branch || '')) focus.push(f);
+    } else if (branchRe(branch).test(f.branch || '') || /^all\b/i.test(f.branch || '')) focus.push(f);
   }
   // Suggested when the company list has nothing for this branch: Hot open leads by deadline, then size.
   const suggested = focus.length ? [] : pipeline.enrichFocus(open.filter(o => o.priority === 'Hot')
@@ -83,7 +89,7 @@ function branchSummary(name, { week, today } = {}) {
     WHERE a.opportunity_id IN (${[...ids].join(',')}) ORDER BY a.id DESC LIMIT 20`).all() : [];
 
   return {
-    branch, owner, week, weeks: pipeline.weeks(), today, tiles, company_wide_open: companyWide,
+    branch, owner, includes: pipeline.branchAliases(branch).slice(1), week, weeks: pipeline.weeks(), today, tiles, company_wide_open: companyWide,
     reps: Object.values(reps).sort((a, b) => (a.rep === '(unassigned)') - (b.rep === '(unassigned)') || b.hot - a.hot || b.open - a.open),
     status_funnel: statusFunnel, focus, suggested_focus: suggested, upcoming, overdue, activity,
     leads: mine.sort((a, b) => ['Hot', 'Warm', 'Watch'].indexOf(a.priority) - ['Hot', 'Warm', 'Watch'].indexOf(b.priority) || (a.deadline || '9999').localeCompare(b.deadline || '9999') || a.id - b.id),

@@ -68,3 +68,29 @@ test('meta tells a branch owner which branch is theirs', async () => {
   assert.deepEqual((await req('GET', '/api/pipeline/meta')).body.my_branches, ['Boise']);
   cookie = saved;
 });
+
+test('merging Portland into Springfield: one page, one set of numbers, locations kept', async () => {
+  await req('POST', '/api/pipeline/scan', { week: '2026-11-09', opportunities: [
+    { business: 'Corbett SD', branch: 'Portland', priority: 'Hot', deal_size: '$50K–$150K' },
+    { business: 'Salem-Keizer Schools', branch: 'Portland (Salem area)', list_type: 'switch', priority: 'Hot', deal_size: '$40K–$150K' },
+    { business: "Fitti's Pizza", branch: 'Springfield (Eugene)', priority: 'Hot', deal_size: '$100K–$200K' },
+  ] });
+  await req('PUT', '/api/settings', { branches: ['Springfield', 'Bend', 'Medford', 'Boise'], branch_merges: { Portland: 'Springfield' }, branch_owners: { Boise: 'John', Bend: 'Scott', Springfield: 'Nyles' } });
+  const s = (await req('GET', '/api/branches/Springfield?week=2026-11-09')).body;
+  assert.deepEqual(s.includes, ['Portland']);
+  assert.deepEqual(s.leads.map(o => o.business).sort(), ['Corbett SD', "Fitti's Pizza", 'Salem-Keizer Schools']);
+  assert.equal(s.leads.find(o => o.business === 'Corbett SD').branch, 'Portland', 'location text kept');
+  assert.equal((await req('GET', '/api/branches/Portland?week=2026-11-09')).body.branch, 'Springfield', 'old Portland link lands on Springfield');
+  const ex = (await req('GET', '/api/pipeline/summary?week=2026-11-09')).body.branches;
+  assert.deepEqual(ex.map(b => b.branch), ['Springfield', 'Bend', 'Medford', 'Boise']);
+  const spr = ex.find(b => b.branch === 'Springfield');
+  assert.deepEqual([spr.leads, spr.switch, spr.low], [2, 1, 190000]);
+  // New Portland leads route to Springfield's owner; Pipeline filter covers both.
+  const n = await req('POST', '/api/opportunities', { business: 'New Portland Cafe', branch: 'Portland' });
+  assert.equal(n.body.assigned_rep, 'Nyles');
+  const filtered = (await req('GET', '/api/opportunities?branch=Springfield')).body.map(o => o.business);
+  assert.ok(filtered.includes('Corbett SD') && filtered.includes("Fitti's Pizza") && filtered.includes('New Portland Cafe'));
+  // Undo = remove the merge.
+  await req('PUT', '/api/settings', { branches: ['Springfield', 'Portland', 'Bend', 'Medford', 'Boise'], branch_merges: {} });
+  assert.deepEqual((await req('GET', '/api/branches/Springfield?week=2026-11-09')).body.leads.map(o => o.business), ["Fitti's Pizza"]);
+});

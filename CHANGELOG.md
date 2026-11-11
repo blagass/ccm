@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Branch merges**: Portland is merged into Springfield (owner Nyles). Portland/Salem leads keep their location but count toward Springfield on the branch page, the Executive Summary, routing and the Excel export. Set in settings (`branch_merges`); removing the merge restores a separate Portland branch.
 - **Branch pages** (`#/branch/Boise` etc.): tiles for open, Hot, new this week, pipeline, Hot with no rep, still New, deadlines in the next 14 days, won/lost; this week's focus narrowed to the branch (or suggested from its Hot leads); a three-week "coming up" list with deadlines, tasks and overdue items; the branch's leads with tabs and inline rep/status; who's working what; status breakdown; recent activity. "Branches" in the sidebar opens your own branch if you own one; the Executive Summary's branch table links to each page.
 
 ## Alpha 1.0 (`1.0.0-alpha`): 2026-11-09

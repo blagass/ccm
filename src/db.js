@@ -179,7 +179,8 @@ const DEFAULT_SETTINGS = {
   mql_threshold: 50, // contacts reaching this score auto-promote to MQL
   branches: ['Springfield', 'Portland', 'Bend', 'Medford', 'Boise'],
   branch_owners: {},   // { Boise: 'John', ... } new and unassigned leads go to the branch owner
-  owner_name: '',      // display name for the built-in owner login (ADMIN_PASSWORD)
+  owner_name: '',
+  branch_merges: {},    // { Portland: 'Springfield' } leads keep their location but count toward the target branch      // display name for the built-in owner login (ADMIN_PASSWORD)
   reps: [],
 };
 for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {

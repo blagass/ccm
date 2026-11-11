@@ -37,7 +37,7 @@ async function branchView(name, q) {
 
   view.innerHTML = `${reps}
   <div class="branch-tabs no-print">${m.branches.map(x => `<a href="#/branch/${encodeURIComponent(x)}${q.get('week') ? '?week=' + q.get('week') : ''}" class="${x === b.branch ? 'on' : ''}">${esc(x)}${m.my_branches.includes(x) ? ' <span class="mine">★</span>' : ''}</a>`).join('')}</div>
-  <div class="head"><div><h1>${esc(b.branch)} Branch</h1>
+  <div class="head"><div><h1>${esc(b.branch)} Branch${b.includes.length ? ` <span class="incl">incl. ${b.includes.map(esc).join(', ')}</span>` : ''}</h1>
       <div class="muted">${b.owner ? `Branch owner: <b>${esc(b.owner)}</b>` : '<span class="pill warn">No branch owner yet</span> <a href="#/settings">set one in Settings</a>'} · Week of ${fmtWeek(b.week)}</div></div>
     <div class="row no-print" style="flex:0 0 auto">
       <select id="bweek" style="width:auto">${b.weeks.map(w => `<option value="${w}" ${w === b.week ? 'selected' : ''}>Week of ${fmtWeek(w)}</option>`).join('')}</select>

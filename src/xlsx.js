@@ -286,13 +286,14 @@ async function exportWorkbook(week, { company = 'Curtis Restaurant Equipment', s
   ['Branch', 'Leads', 'Hot leads', 'Switch prospects', 'Est. low', 'Est. high'].forEach((h, i) => put(`${'BCDEFG'[i]}${r}`, h, { bold: true, size: 9 }, { fill: LIGHT }));
   r++;
   for (const b of sum.branches) {
-    const p = `"${b.branch}*"`;
-    put(`B${r}`, b.branch, { bold: true, size: 9 });
-    put(`C${r}`, { formula: `COUNTIF(${ref('lead', 'B')},${p})`, result: b.leads }, { size: 9 });
-    put(`D${r}`, { formula: `COUNTIFS(${ref('lead', 'B')},${p},${ref('lead', 'A')},"Hot")`, result: b.hot }, { size: 9 });
-    put(`E${r}`, { formula: `COUNTIF(${ref('switch', 'B')},${p})`, result: b.switch }, { size: 9 });
-    put(`F${r}`, { formula: `SUMIFS(${T('Q')},${T('O')},${p},${T('M')},"<>Chain")`, result: b.low }, { size: 9 }).numFmt = '$#,##0';
-    put(`G${r}`, { formula: `SUMIFS(${T('R')},${T('O')},${p},${T('M')},"<>Chain")`, result: b.high }, { size: 9 }).numFmt = '$#,##0';
+    const names = pipeline.branchAliases(b.branch);
+    const each = fn => names.map(n => fn(`"${n}*"`)).join('+');
+    put(`B${r}`, names.length > 1 ? `${b.branch} (incl. ${names.slice(1).join(', ')})` : b.branch, { bold: true, size: 9 });
+    put(`C${r}`, { formula: each(p => `COUNTIF(${ref('lead', 'B')},${p})`), result: b.leads }, { size: 9 });
+    put(`D${r}`, { formula: each(p => `COUNTIFS(${ref('lead', 'B')},${p},${ref('lead', 'A')},"Hot")`), result: b.hot }, { size: 9 });
+    put(`E${r}`, { formula: each(p => `COUNTIF(${ref('switch', 'B')},${p})`), result: b.switch }, { size: 9 });
+    put(`F${r}`, { formula: each(p => `SUMIFS(${T('Q')},${T('O')},${p},${T('M')},"<>Chain")`), result: b.low }, { size: 9 }).numFmt = '$#,##0';
+    put(`G${r}`, { formula: each(p => `SUMIFS(${T('R')},${T('O')},${p},${T('M')},"<>Chain")`), result: b.high }, { size: 9 }).numFmt = '$#,##0';
     r++;
   }
   if (sum.report.plays.length) {
