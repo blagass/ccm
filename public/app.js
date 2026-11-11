@@ -60,6 +60,7 @@ async function boot() {
   ME = me.user;
   $('#login').classList.add('hidden'); $('#accept').classList.add('hidden'); $('#shell').classList.remove('hidden');
   $$('.admin-only').forEach(el => el.classList.toggle('hidden', ME.role !== 'admin'));
+  GET('/settings').then(st => $('#nav-marketing').classList.toggle('hidden', !st.show_marketing)).catch(() => {});
   $('#whoami').innerHTML = `${esc(ME.name)}<div>${ME.role === 'admin' ? 'Admin' : 'Rep'}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
   $('#whoami').title = "Show today's welcome";
   $('#whoami').onclick = () => showWelcome(true);
@@ -562,6 +563,7 @@ async function settingsView() {
   <div class="grid g2">
     <div class="card"><h2>General</h2>
       <div class="field"><label class="f">Your name (for the owner login: shown in the welcome greeting and on activity)</label><input data-s="owner_name" value="${esc(s.owner_name || '')}" placeholder="e.g. Brandon Lagasse"></div>
+      <div class="field"><label class="f"><input type="checkbox" data-s="show_marketing" style="width:auto" ${s.show_marketing ? 'checked' : ''}> Show the Marketing section in the sidebar (dashboard, contacts, forms, workflows, emails, broadcasts)</label></div>
       <div class="field"><label class="f">Company name (used in email footers)</label><input data-s="company_name" value="${esc(s.company_name)}"></div>
       <div class="field"><label class="f">From address</label><input data-s="from_email" value="${esc(s.from_email)}"></div>
       <p class="muted">Email delivery: ${s.smtp_configured ? '<span class="pill ok">SMTP configured</span>' : '<span class="pill warn">Dev mode — set SMTP_HOST to deliver</span>'}<br>Public URL: <code>${esc(s.base_url)}</code> (set BASE_URL for tracking links)<br>Version: <b>${s.app_version === '1.0.0-alpha' ? 'Alpha 1.0' : esc(s.app_version)}</b></p>
@@ -582,9 +584,10 @@ async function settingsView() {
   </div>
   <button class="btn primary" id="s-save" style="margin-top:16px">Save settings</button>`;
   $('#s-save').onclick = async () => {
-    const body = {}; $$('[data-s]').forEach(i => body[i.dataset.s] = i.type === 'number' ? Number(i.value) : i.value);
+    const body = {}; $$('[data-s]').forEach(i => body[i.dataset.s] = i.type === 'checkbox' ? i.checked : i.type === 'number' ? Number(i.value) : i.value);
     body.branch_owners = Object.fromEntries($$('[data-owner]').map(i => [i.dataset.owner, i.value.trim()]).filter(([, v]) => v));
     await PUT('/settings', body); toast('Settings saved');
+    $('#nav-marketing').classList.toggle('hidden', !body.show_marketing);
   };
   $('#apply-owners').onclick = async () => {
     $('#s-save').click();
