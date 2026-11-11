@@ -118,7 +118,7 @@ async function execSummary(q) {
 
   <div class="grid g2" style="margin-top:16px">
     <div class="card"><h2>Pipeline by branch (new leads + switch prospects)</h2><table><tr><th>Branch</th><th>Leads</th><th>Hot</th><th>Switch</th><th>Est. low</th><th>Est. high</th></tr>
-      ${s.branches.map(b => `<tr class="click" data-href="#/pipeline?branch=${encodeURIComponent(b.branch)}&week=${s.week}"><td><b>${esc(b.branch)}</b></td><td>${b.leads}</td><td>${b.hot}</td><td>${b.switch}</td><td>${money$(b.low)}</td><td>${money$(b.high)}</td></tr>`).join('')}</table>
+      ${s.branches.map(b => `<tr class="click" data-href="#/branch/${encodeURIComponent(b.branch)}?week=${s.week}" title="Open the ${esc(b.branch)} branch page"><td><b>${esc(b.branch)}</b></td><td>${b.leads}</td><td>${b.hot}</td><td>${b.switch}</td><td>${money$(b.low)}</td><td>${money$(b.high)}</td></tr>`).join('')}</table>
       <p class="muted small">Multi-branch rows ("All branches") aren't counted in a single branch.</p></div>
     <div class="card"><h2>Hot this week</h2><table>${s.hot.map(h => `<tr class="click" data-href="#/pipeline/${h.id}"><td>${esc(h.business)}<div class="muted small">${LIST_SHORT[h.list_type]} · ${esc(h.branch)}</div></td>
       <td>${h.deadline ? `<span class="pill ${daysUntil(h.deadline) <= 7 ? 'bad' : 'warn'}">due ${esc(h.deadline.slice(5))}</span>` : ''}</td><td>${h.assigned_rep ? esc(h.assigned_rep) : '<span class="pill bad">unassigned</span>'}</td><td>${esc(h.status)}</td></tr>`).join('')}</table></div>

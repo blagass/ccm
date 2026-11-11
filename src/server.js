@@ -13,6 +13,7 @@ const xlsx = require('./xlsx');
 const users = require('./users');
 const tasks = require('./tasks');
 const welcome = require('./welcome');
+const branchPage = require('./branch');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const API_KEY = process.env.API_KEY || '';
@@ -381,8 +382,10 @@ api.get('/pipeline/meta', (req, res) => res.json({
   list_types: pipeline.LIST_TYPES, priorities: pipeline.PRIORITIES, statuses: pipeline.STATUSES, columns: pipeline.COLUMNS,
   branches: getSettings().branches, reps: [...new Set([...(getSettings().reps || []), ...users.names(), ...db.prepare("SELECT DISTINCT assigned_rep r FROM opportunities WHERE assigned_rep != ''").all().map(r => r.r)])].sort(),
   weeks: pipeline.weeks(), current_week: pipeline.mondayOf(),
+  branch_owners: getSettings().branch_owners || {}, my_branches: branchPage.branchesOwnedBy(req.user.name),
 }));
 api.get('/pipeline/summary', (req, res) => res.json(pipeline.summary(req.query.week)));
+api.get('/branches/:branch', (req, res) => res.json(branchPage.branchSummary(req.params.branch, { week: req.query.week, today: req.query.today })));
 api.put('/pipeline/reports/:week', (req, res) => res.json(pipeline.saveReport(req.params.week, req.body)));
 api.post('/pipeline/assign-by-branch', requireAdmin, (req, res) => res.json({ assigned: pipeline.assignByBranch(req.user.name) }));
 api.post('/pipeline/reports/:week/focus', (req, res) => {

@@ -48,6 +48,9 @@ A self-hosted alternative to HubSpot for **forms, lead management, marketing aut
 **Daily welcome**
 - Once a day, after signing in, a friendly popup greets each person by name and suggests up to three quick wins. Reps get quick wins from their own work: carried-over tasks, deadlines in the next week, Hot leads still at "New", Admins get the team picture instead: Hot leads to route, this week's new leads, team deadlines with who owns them, and Hot leads still at "New". Busy weeks are framed calmly. Click your name in the sidebar to see it again.
 
+**Branch pages**
+- One page per branch (Branches in the sidebar; opens your own branch if you're its owner): key numbers, this week's focus for the branch, deadlines and tasks for the next three weeks, all of the branch's leads with inline rep/status, who's working what, and recent activity.
+
 **Branch owners**
 - In Settings, set an owner per branch (e.g. Boise: John). New leads from the weekly scan, imports and the Add lead form are assigned to the branch owner automatically unless a rep is picked, and one click assigns existing unassigned open leads. Owners can be entered by first name before they have an account; when they accept their invite, their leads and tasks switch to their full name.
 
