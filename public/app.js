@@ -65,6 +65,7 @@ async function boot() {
   $$('.not-manager').forEach(el => el.classList.toggle('hidden', ME.role === 'manager'));
   $$('.ops-only').forEach(el => el.classList.toggle('hidden', !['admin', 'operator'].includes(ME.role)));
   if (typeof refreshReviewBadge === 'function') refreshReviewBadge();
+  if (typeof refreshFollowupBadge === 'function') refreshFollowupBadge();
   GET('/settings').then(st => $('#nav-marketing').classList.toggle('hidden', !st.show_marketing)).catch(() => {});
   $('#whoami').innerHTML = `${esc(ME.name)}<div>${esc(roleLabel(ME))}${ME.email ? ' · ' + esc(ME.email) : ''}</div>`;
   // Branch managers start on their own branch page.

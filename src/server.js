@@ -14,6 +14,7 @@ const users = require('./users');
 const tasks = require('./tasks');
 const welcome = require('./welcome');
 const branchPage = require('./branch');
+const followup = require('./followup');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const API_KEY = process.env.API_KEY || '';
@@ -417,6 +418,11 @@ api.post('/opportunities/:id/review-note', requireOps, (req, res) => {
   const o = pipeline.reviewNote(Number(req.params.id), note, req.user.name);
   o ? res.json(o) : res.status(404).json({ error: 'Not found' });
 });
+// Follow-up: approved leads their branch hasn't opened yet, and reminders Operators send about them.
+api.get('/followup', requireOps, (req, res) => res.json(followup.untouched({ today: req.query.today })));
+api.post('/reminders', requireOps, (req, res) => res.status(201).json(followup.create(req.body || {}, req.user.name)));
+api.get('/reminders/mine', (req, res) => res.json(followup.forUser(req.user, o => canSee(req.user, o))));
+api.post('/reminders/:id/dismiss', (req, res) => { const r = followup.dismiss(Number(req.params.id), req.user); r ? res.json(r) : res.status(404).json({ error: 'Not found' }); });
 api.post('/review/reset-open', requireAdmin, (req, res) => res.json({ moved: pipeline.resetOpenToReview(req.user.name) }));
 api.post('/pipeline/assign-by-branch', requireOps, (req, res) => res.json({ assigned: pipeline.assignByBranch(req.user.name) }));
 api.post('/pipeline/reports/:week/focus', notForManagers, (req, res) => {
@@ -442,6 +448,7 @@ api.post('/opportunities', (req, res) => {
 api.get('/opportunities/:id', (req, res) => {
   const o = visibleOpp(req, req.params.id);
   if (!o) return res.status(404).json({ error: 'Not found' });
+  if (req.query.peek !== '1' && followup.touch(o.id, req.user, 'view')) Object.assign(o, pipeline.get(o.id));
   res.json({ ...o, personas: pipeline.personasFor(o.persona), activity: pipeline.activity(o.id) });
 });
 // Moving a lead between branches is for admins, operators and branch managers (managers: their own leads).
@@ -458,6 +465,7 @@ api.patch('/opportunities/:id', (req, res) => {
   if (cur && req.body && req.body.branch !== undefined && req.body.branch !== cur.branch && !canMove(req.user)) {
     return res.status(403).json({ error: 'Only admins, operators and branch managers can move leads between branches' });
   }
+  followup.touch(cur.id, req.user, 'work');
   const o = pipeline.update(Number(req.params.id), req.body, { actor: req.user.name });
   o ? res.json(o) : res.status(404).json({ error: 'Not found' });
 });
@@ -467,6 +475,7 @@ api.post('/opportunities/:id/notes', (req, res) => {
   const t = String(req.body.text || '').trim();
   if (!visibleOpp(req, req.params.id)) return res.status(404).json({ error: 'Not found' });
   if (!t) return res.status(400).json({ error: 'Note text required' });
+  followup.touch(Number(req.params.id), req.user, 'work');
   pipeline.log(Number(req.params.id), 'note', t, req.user.name);
   res.json({ ok: true });
 });
@@ -531,7 +540,9 @@ api.get('/welcome', (req, res) => {
 api.get('/calendar', (req, res) => res.json(tasks.calendar({ from: req.query.from, to: req.query.to, today: req.query.today, mine: req.query.mine === '1' ? req.user.name : null, branch: managerOf(req.user), hidePending: !isOps(req.user) })));
 api.post('/tasks', (req, res) => {
   if (req.body?.opportunity_id && !visibleOpp(req, req.body.opportunity_id)) return res.status(404).json({ error: 'Lead not found' });
-  res.status(201).json(tasks.create(req.body || {}, req.user.name));
+  const t = tasks.create(req.body || {}, req.user.name);
+  if (t.opportunity_id) followup.touch(t.opportunity_id, req.user, 'work');
+  res.status(201).json(t);
 });
 api.patch('/tasks/:id', (req, res) => { const t = tasks.update(Number(req.params.id), req.body || {}, req.user.name); t ? res.json(t) : res.status(404).json({ error: 'Not found' }); });
 api.delete('/tasks/:id', (req, res) => { tasks.remove(Number(req.params.id)); res.json({ ok: true }); });

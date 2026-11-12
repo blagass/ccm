@@ -254,3 +254,18 @@ table.review td{vertical-align:top}
 table.review .rwhat{color:#475467;margin-top:4px;max-width:520px}
 table.review .ract{white-space:nowrap}table.review .ract .btn{margin:0 2px 4px 0}
 table.review select.rbranch{min-width:130px;font-weight:700;color:var(--navy)}
+
+/* Follow-up: leads not looked at yet, and reminders */
+.fu-group{margin-bottom:16px}
+.fu-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
+.fu-head h2{margin:0}
+.fu-last{margin-top:3px}.fu-last.today{color:var(--warn);font-weight:700}
+.fu-draft{margin-top:12px;padding:12px;background:#f3f7fb;border-radius:10px}
+.fu-draft textarea{width:100%;min-height:210px;font:13px/1.5 Cantarell,system-ui,sans-serif}
+.fu-draft .row{justify-content:flex-start;gap:8px;margin-top:8px}
+.reminder-card{background:#eef6fd;border:1px solid #b9d9f3;border-left:5px solid var(--brand);margin-bottom:14px}
+.reminder-card .rc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.reminder-card .rc-actions{margin-left:auto;display:flex;gap:6px}
+.reminder-card .rc-msg{white-space:pre-wrap;margin:8px 0;font-size:14px}
+.reminder-card .rc-leads{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
+.reminder-card .rc-leads a.done{color:#667085;text-decoration:line-through}

@@ -16,7 +16,8 @@ async function branchView(name, q) {
   const today = ymd(new Date());
   const params = new URLSearchParams({ today });
   if (q.get('week')) params.set('week', q.get('week'));
-  const b = await GET(`/branches/${encodeURIComponent(name)}?${params}`);
+  const [b, rems] = await Promise.all([GET(`/branches/${encodeURIComponent(name)}?${params}`), GET('/reminders/mine').catch(() => [])]);
+  const myRems = rems.filter(r => !r.branch || r.branch === b.branch);
   const t = b.tiles;
   const tab = q.get('tab') || 'open';
   const isClosed = o => ['Won', 'Lost', 'Not a fit', 'Already a customer', 'Not interested'].includes(o.status);
@@ -24,6 +25,7 @@ async function branchView(name, q) {
     open: ['Open', o => !isClosed(o)],
     hot: ['Hot', o => o.priority === 'Hot' && !isClosed(o)],
     new: ['New this week', o => o.first_seen_week === b.week],
+    unopened: ['Not opened yet', o => !isClosed(o) && !o.touched_at],
     switch: ['Switch prospects', o => o.list_type === 'switch' && !isClosed(o)],
     chain: ['Chain & franchise', o => o.list_type === 'chain' && !isClosed(o)],
     closed: ['Closed', isClosed],
@@ -44,6 +46,7 @@ async function branchView(name, q) {
       <a class="btn" href="#/pipeline?branch=${encodeURIComponent(b.branch)}&open=true">Open in Pipeline</a><button class="btn" onclick="print()">Print</button></div></div>
 
   ${b.pending_review && ['admin', 'operator'].includes(ME?.role) ? `<a class="card review-banner no-print" href="#/review?branch=${encodeURIComponent(b.branch)}"><b>📥 ${b.pending_review} ${esc(b.branch)} lead${b.pending_review === 1 ? '' : 's'} waiting for review.</b> They'll show here once approved. <span class="go">Review ›</span></a>` : ''}
+  ${myRems.map(reminderCard).join('')}
   <div class="no-print branch-glance">
   <h3 class="band">${esc(b.branch)} at a glance</h3>
   <div class="grid g4">
@@ -123,6 +126,17 @@ async function branchView(name, q) {
     });
   }
   wireInline();
+  $$('[data-dismiss]').forEach(el => el.onclick = async () => {
+    try { await POST(`/reminders/${el.dataset.dismiss}/dismiss`); el.closest('.reminder-card').remove(); toast('Reminder dismissed'); } catch (err) { toast(err.message, true); }
+  });
+
+  function reminderCard(r) {
+    const when = new Date(String(r.created_at).replace(' ', 'T') + 'Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    return `<div class="card reminder-card no-print"><div class="rc-head"><b>📣 Reminder from ${esc(r.from_name || 'your Operator')}</b> <span class="muted small">${esc(when)} · ${r.remaining} of ${r.leads.length} still to open</span>
+        <span class="rc-actions"><a class="btn sm" href="${link('tab', 'unopened')}">Show them</a> <button class="btn sm" data-dismiss="${r.id}">Dismiss</button></span></div>
+      <div class="rc-msg">${esc(r.message)}</div>
+      <div class="rc-leads">${r.leads.map(l => `<a href="#/pipeline/${l.id}" class="${l.done ? 'done' : ''}">${l.done ? '✓ ' : ''}${priPill(l.priority)} ${short(l.business)}</a>`).join('')}</div></div>`;
+  }
 
   function leadsTable(list) {
     return list.length ? `<div style="overflow-x:auto"><table class="opps"><thead><tr><th>Priority</th><th>Business</th><th>Stage</th><th>Est. deal</th><th>Timeline</th><th class="gold">Assigned branch</th><th class="gold">Status</th></tr></thead><tbody>

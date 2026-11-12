@@ -11,6 +11,15 @@ const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const shortName = b => String(b || '').split(/\s[–(]/)[0];
 const pick = (arr, seed) => arr[Math.abs(seed) % arr.length];
+// A reminder from an Operator always comes first ("Jordan sent a reminder (Wed, Nov 12): 6 leads waiting to be opened").
+function reminderWin(user, href) {
+  const rems = require('./followup').forUser(user);
+  if (!rems.length) return null;
+  const r = rems[0], n = rems.reduce((a, x) => a + x.remaining, 0);
+  const from = firstName(r.from_name) || 'Your Operator';
+  const first = r.leads.find(l => !l.done);
+  return { icon: '📣', text: `${from} sent a reminder (${shortDate(String(r.created_at).slice(0, 10))}): ${plural(n, 'lead')} waiting to be opened${first ? `, starting with ${shortName(first.business)}` : ''}.`, href: href || (first ? `#/pipeline/${first.id}` : '#/pipeline') };
+}
 
 // "brandon lagasse" → "Brandon"; "V. Reeves" → "V."; generic owner/automation names → no name.
 function firstName(name) {
@@ -36,6 +45,8 @@ function managerBriefing(user, { today, hour }) {
   const wins = [];
   const used = new Set();
   const add = w => { if (wins.length < 3 && !(w.opportunity_id && used.has(w.opportunity_id))) { wins.push(w); if (w.opportunity_id) used.add(w.opportunity_id); } };
+  const rw = reminderWin(user, `${page}?tab=unopened`);
+  if (rw) add(rw);
   if (mineOverdue.length) add({ icon: '✔', text: mineOverdue.length === 1 ? `Clear one carried-over task: “${mineOverdue[0].title}”` : `Clear ${mineOverdue.length} carried-over tasks, starting with “${mineOverdue[0].title}”`, href: `#/calendar?d=${today}`, opportunity_id: mineOverdue.length === 1 ? mineOverdue[0].opportunity_id : null });
   if (t.hot_unassigned) add({ icon: '👥', text: `Hand out ${plural(t.hot_unassigned, `Hot ${br} lead`)} that ${t.hot_unassigned === 1 ? "doesn't" : "don't"} have a rep yet.`, href: `#/pipeline?branch=${encodeURIComponent(br)}&priority=Hot&rep=__none&open=true` });
   if (soon[0]) {
@@ -118,6 +129,8 @@ function briefing(user, { today, hour }) {
       const hot = waiting.filter(o => o.priority === 'Hot').length;
       add({ icon: '📥', text: `Review ${plural(waiting.length, 'new lead')}${hot ? ` (${hot} Hot)` : ''} waiting for you. Approving sends each one to its branch.`, href: '#/review' });
     }
+    const f = require('./followup').untouched({ today }).stats;
+    if (f.over_3) add({ icon: '👀', text: `${plural(f.over_3, 'approved lead')} ${f.over_3 === 1 ? "hasn't" : "haven't"} been opened by ${f.over_3 === 1 ? 'its' : 'their'} branch after 3+ days${f.red ? ` (${f.red} urgent)` : ''}. A friendly reminder helps.`, href: '#/followup' });
     overdueWin();
     if (unassignedHot) add({ icon: '👥', text: `Route ${plural(unassignedHot, 'Hot lead')} that ${unassignedHot === 1 ? "doesn't" : "don't"} have an owner yet, so reps can get moving.`, href: '#/pipeline?priority=Hot&rep=__none&open=true' });
     if (soon[0]) deadlineWin(soon[0]);
@@ -126,6 +139,8 @@ function briefing(user, { today, hour }) {
     if (teamOverdue) add({ icon: '🗓', text: `The team has ${plural(teamOverdue, 'carried-over task')}. Worth a quick look on the calendar.`, href: `#/calendar?d=${today}&mine=0` });
     if (topFocus) add({ icon: '★', text: `This week's #1 focus: ${topFocus.label || topFocus.action}`, href: topFocus.opportunity_id ? `#/pipeline/${topFocus.opportunity_id}` : '#/', opportunity_id: topFocus.opportunity_id });
   } else {
+    const rw = reminderWin(user);
+    if (rw) add(rw);
     overdueWin();
     if (soon[0]) deadlineWin(soon[0]);
     if (soon[1]) deadlineWin(soon[1]);

@@ -116,6 +116,11 @@ try { db.exec('ALTER TABLE opportunities ADD COLUMN branch_locked INTEGER DEFAUL
 try { db.exec("ALTER TABLE opportunities ADD COLUMN review_status TEXT DEFAULT 'approved'"); } catch { /* exists */ }
 try { db.exec('ALTER TABLE opportunities ADD COLUMN review_note TEXT'); } catch { /* exists */ }
 const reviewOn = () => getSettings().review_new_leads !== false;
+// Follow-up tracking: when a lead reached its branch, and when someone there first opened or worked it.
+try { db.exec('ALTER TABLE opportunities ADD COLUMN routed_at TEXT'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE opportunities ADD COLUMN touched_at TEXT'); } catch { /* exists */ }
+try { db.exec('ALTER TABLE opportunities ADD COLUMN touched_by TEXT'); } catch { /* exists */ }
+const resetTouch = id => db.prepare("UPDATE opportunities SET routed_at = datetime('now'), touched_at = NULL, touched_by = NULL WHERE id = ?").run(id);
 
 // Approve a pending lead: it goes to the chosen (or suggested) branch and that branch's owner.
 function approve(id, branch, actor) {
@@ -123,6 +128,7 @@ function approve(id, branch, actor) {
   if (!o) return null;
   if (branch && branch !== primaryBranch(o.branch)) moveToBranch(id, branch, actor);
   db.prepare("UPDATE opportunities SET review_status = 'approved', review_note = NULL, updated_at = datetime('now') WHERE id = ?").run(id);
+  resetTouch(id);
   const after = get(id);
   if (!after.assigned_rep) autoAssign(id, actor);
   const final = get(id);
@@ -159,6 +165,7 @@ function moveToBranch(id, branch, actor) {
   const owner = (getSettings().branch_owners || {})[target] || '';
   const from = primaryBranch(o.branch) || o.branch || 'no branch';
   db.prepare("UPDATE opportunities SET branch = ?, assigned_rep = ?, branch_locked = 1, updated_at = datetime('now') WHERE id = ?").run(target, owner, id);
+  if (from !== target) resetTouch(id);   // the new branch hasn't seen it yet
   if (from !== target) log(id, 'move', `Moved from ${from} to ${target}${owner ? ` (now with ${owner})` : ''}`, actor || null);
   return get(id);
 }

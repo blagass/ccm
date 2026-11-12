@@ -187,6 +187,9 @@ async function execSummary(q) {
   if (['admin', 'operator'].includes(ME?.role)) GET('/review').then(r => {
     if (r.leads.length) $('#review-banner').innerHTML = `<a class="card review-banner no-print" href="#/review"><b>📥 ${r.leads.length} new lead${r.leads.length === 1 ? '' : 's'} waiting for review</b>${r.leads.filter(o => o.priority === 'Hot').length ? ` (${r.leads.filter(o => o.priority === 'Hot').length} Hot)` : ''}. Branches see them once they're approved. <span class="go">Review now ›</span></a>`;
   }).catch(() => {});
+  if (['admin', 'operator'].includes(ME?.role)) GET('/followup?today=' + ymd(new Date())).then(f => {
+    if (f.stats.over_7 || f.stats.red) $('#review-banner').insertAdjacentHTML('beforeend', `<a class="card review-banner no-print" href="#/followup"><b>👀 ${f.stats.untouched} approved lead${f.stats.untouched === 1 ? '' : 's'} not opened by ${f.stats.untouched === 1 ? 'its' : 'their'} branch yet</b>: ${f.stats.over_7} waiting more than a week${f.stats.red ? `, ${f.stats.red} urgent` : ''}. <span class="go">Send reminders ›</span></a>`);
+  }).catch(() => {});
   $('#week').onchange = e => location.hash = '#/?week=' + e.target.value;
   // Focus list: rows carry their prospect id; branch, deal, owner and status come from the prospect.
   const readFocus = () => $$('#focus tbody tr[data-i]').map(tr => {
