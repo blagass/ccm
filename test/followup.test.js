@@ -114,6 +114,18 @@ test('operators send reminders; only the recipient sees them, and they clear onc
   assert.equal((await john('GET', '/api/reminders/mine')).body.length, 0, 'clears itself once everything is opened');
 });
 
+test('a reminder sent to a placeholder name ("Scott") reaches Scott once he accepts his invite with his full name', async () => {
+  await opal('POST', '/api/review/approve', { items: [{ id: ids['Still Pending Cafe'], branch: 'Bend' }] });
+  await opal('POST', '/api/reminders', { to_name: 'Scott', branch: 'Bend', message: 'Hi Scott', lead_ids: [ids['Still Pending Cafe']] });
+  const scott = client();
+  const inv = await owner('POST', '/api/users/invite', { email: 'scott@x.com', role: 'manager', branch: 'Bend' });
+  await scott('POST', `/api/invites/${token(inv.body.link)}/accept`, { name: 'Scott Miller', password: 'a-good-password-1' });
+  const mine = (await scott('GET', '/api/reminders/mine')).body;
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].message, 'Hi Scott');
+  await opal('POST', `/api/opportunities/${ids['Still Pending Cafe']}/branch`, { branch: 'Boise' });
+});
+
 test('recipients can dismiss a reminder, and operators get a nudge when leads sit unopened', async () => {
   await opal('POST', '/api/review/approve', { items: [{ id: ids['Still Pending Cafe'] }] });
   const r = (await opal('POST', '/api/reminders', { to_name: 'John Carter', message: 'Nudge', lead_ids: [ids['Still Pending Cafe']] })).body;

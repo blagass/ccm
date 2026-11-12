@@ -191,6 +191,7 @@ function claimPlaceholderName(fullName) {
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('branch_owners', JSON.stringify(owners));
   const n = db.prepare("UPDATE opportunities SET assigned_rep = ? WHERE lower(trim(assigned_rep)) = lower(?)").run(fullName, first).changes;
   try { db.prepare("UPDATE tasks SET assigned_to = ? WHERE lower(trim(assigned_to)) = lower(?)").run(fullName, first); } catch { /* tasks table not created yet */ }
+  try { db.prepare("UPDATE reminders SET to_name = ? WHERE lower(trim(to_name)) = lower(?)").run(fullName, first); } catch { /* reminders table not created yet */ }
   return n;
 }
 try { db.exec('ALTER TABLE opp_activities ADD COLUMN user_name TEXT'); } catch { /* column exists */ }
